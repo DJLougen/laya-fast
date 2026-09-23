@@ -19,9 +19,12 @@ backups/
 ane/body*/model.mlmodelc/
 ane/body*/model.mlpackage/
 
-# Machine-local quality dumps (paths and a suite that is not in this repo).
-quality_*.json
-!quality_expected.json
-!quality_protocol.json
-quality_*.csv
+# Generated quality outputs are local run artifacts; keep the public inputs tracked.
+/quality_*.json
+/quality_*.csv
+!benchmarks/quality/quality_expected.json
+!benchmarks/quality/quality_protocol.json
+benchmarks/results/results_*.json
+benchmarks/results/quality_*.json
+benchmarks/results/quality_*.csv
 run_quality.py

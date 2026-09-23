@@ -1,8 +1,8 @@
 """Benchmark + parity for the ANE runtime vs golden fixtures and MLX.
 
 Subcommands:
-  runtime   e2e system_one timing per fixture (same protocol as benchmark.py)
-  parity    compare answers vs autoresearch_golden.json (labels exact, probs <=2e-2)
+  runtime   e2e system_one timing per fixture (same protocol as benchmarks/benchmark.py)
+  parity    compare answers vs benchmarks/fixtures/autoresearch_golden.json (labels exact, probs <=2e-2)
   bodytime  isolated Core ML predict() timing per bucket
   split     concurrency test: ANE handles some questions, MLX the rest
 
@@ -21,6 +21,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "benchmarks"))
 
 import benchmark
 import laya_api
@@ -61,7 +62,7 @@ def cmd_runtime(args):
 
 
 def cmd_parity(args):
-    golden = json.load(open("autoresearch_golden.json"))["fixtures"]
+    golden = json.load(open(Path(__file__).resolve().parent.parent / "benchmarks" / "fixtures" / "autoresearch_golden.json"))["fixtures"]
     agent = LayaANE(args.model, buckets=args.buckets)
     fixtures = benchmark.make_fixtures()
     report = {"cases": {}, "failures": []}

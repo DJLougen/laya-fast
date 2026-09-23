@@ -1,9 +1,9 @@
-"""Native MLX port of the Laya RL-agent decision model (convaiinnovations/laya).
+"""Native MLX port of the Apache-2.0 Laya decision model (convaiinnovations/laya).
 
-Architecture: ModernBERT-large bidirectional encoder + from-scratch decision head,
-ported 1:1 from the original PyTorch implementation (source/rl_common.py
-``DecisionModel``) with transformers 5.5.0 ``modeling_modernbert.py`` as the
-encoder oracle.
+The ModernBERT encoder plus decision head adapts the reference DecisionModel
+from the source revision recorded in NOTICE. This implementation replaces the
+PyTorch forward path with MLX and the Transformers encoder with the project’s
+custom MLX kernels.
 
 Weight names are identical to the original checkpoint (identity mapping), so
 ``load_weights(strict=True)`` verifies completeness: every one of the 206 source

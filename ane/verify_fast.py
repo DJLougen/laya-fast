@@ -1,7 +1,7 @@
 """Verify LayaFast: golden gate + interleaved timing vs LayaMLX in one process.
 
 Usage:
-    .venv/bin/python gpulock.py -- .venv/bin/python ane/verify_fast.py
+    .venv/bin/python benchmarks/gpulock.py -- .venv/bin/python ane/verify_fast.py
 """
 
 import json
@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "benchmarks"))
 
 import benchmark
 import laya_api
@@ -33,7 +34,7 @@ def main():
     print("load: LayaFast %.1f s, LayaMLX %.1f s" % (fast_load, mlx_load), file=sys.stderr)
 
     # ---- golden gate on LayaFast outputs
-    golden = json.load(open("autoresearch_golden.json"))["fixtures"]
+    golden = json.load(open(Path(__file__).resolve().parent.parent / "benchmarks" / "fixtures" / "autoresearch_golden.json"))["fixtures"]
     fixtures = benchmark.make_fixtures()
     import bench_autoresearch
     current = bench_autoresearch.run_all(fast, fixtures)
@@ -96,7 +97,7 @@ def main():
                                       text=True).strip()) // 1024
     report["rss_mb"] = rss
     print("RSS %d MB" % rss, file=sys.stderr)
-    Path("ane/verify_fast.json").write_text(json.dumps(report, indent=2) + "\n")
+    Path(__file__).resolve().parent.joinpath("verify_fast.json").write_text(json.dumps(report, indent=2) + "\n")
     print("wrote ane/verify_fast.json", file=sys.stderr)
     return 0 if not fails else 1
 

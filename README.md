@@ -2,9 +2,11 @@
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-Local typed decisions on Apple Silicon. One forward pass, no generated JSON, and — when the optional Neural Engine bodies are compiled — both the Neural Engine and the GPU working at once.
+Local typed decisions on Apple Silicon. One encoder pass returns a fixed schema; with compiled Neural Engine bodies, Laya Fast can run ANE and GPU work concurrently.
 
-This is an independent runtime for [Convai Innovations' Laya](https://huggingface.co/convaiinnovations/laya) (ModernBERT-large, 421M, Apache-2.0). It is not an official Convai release, and it is not [mizorewww/laya-mlx](https://github.com/mizorewww/laya-mlx). That port is MLX-only; this one adds a Neural Engine body and a router that runs the two engines together.
+An independent Apple Silicon runtime for [Convai Innovations' Laya](https://huggingface.co/convaiinnovations/laya), a 421M ModernBERT-large typed-decision model released under Apache-2.0. It pairs MLX GPU inference with optional Core ML execution on Apple's Neural Engine and routes batch work across both.
+
+**Credits:** Convai Innovations created Laya. This repository's MLX model and request API are ports of the Apache-2.0 Laya reference implementation. `ane/ane_model.py` is adapted from [mizorewww/laya-coreml](https://github.com/mizorewww/laya-coreml)'s ANE prototype under Apache-2.0; this project modifies it for the English checkpoint and adds the fixed-bucket export/runtime/router. See [NOTICE](NOTICE) for source revisions and retained upstream notices. This is not an official Convai release.
 
 ## What it is
 
@@ -22,11 +24,11 @@ Two runtimes share the same request and response shape:
 
 ## Why typed local decisions matter
 
-A hosted judge means a network dependency, per-call latency, and text you still have to parse and validate. A local encoder answers offline in milliseconds, with typed probabilities you can threshold, log, and unit-test. That makes it practical to put a decision step — routing, gating, classification — inside a fast local loop instead of behind an API call.
+Autoregressive LLM/API pipelines often add a network hop and a text-parsing step. Laya runs locally, works offline, returns typed probabilities, and takes a single model pass—useful when a decision needs to sit inside an application loop.
 
 ## Measured speed
 
-On the author's M3 Max (30 GPU cores, 36 GB), fp16, median of the project fixtures (2026-09-22, both gates passing):
+On the author's M3 Max (30 GPU cores, 36 GB), fp16. The table is an interleaved MLX/LayaFast comparison from 2026-09-22, with both gates passing:
 
 | Fixture | MLX only | LayaFast |
 |---|---:|---:|
@@ -35,17 +37,19 @@ On the author's M3 Max (30 GPU cores, 36 GB), fp16, median of the project fixtur
 | 1 long question (512 tokens) | 54 ms | 54 ms |
 | 8×512 | 374 ms | **219 ms** |
 
+A fresh LayaFast parity-gated confirmation run on 2026-09-23 measured 9.57 / 41.73 / 54.23 / 210.76 ms p50 for the four fixtures. It is a confirmation run, not a new paired comparison; see the [run receipt](benchmarks/results/laya-fast-m3max-2026-09-23.json).
+
 Caveats:
 
-- These are single-machine fixture medians, not a benchmark suite. Your numbers depend on chip, memory, and load.
+- These are single-machine fixture medians, not cross-device results. Your numbers depend on chip, memory, and load.
 - The 8×512 win is a 4/4 split across two engines, not a faster kernel — it requires the compiled ANE bodies.
 - Process footprint was about 1.5 GB with the MLX buffer cache capped at 128 MB.
 
-[summary.md](summary.md) is the detailed technical benchmark history, including approaches that were tried and rejected.
+[Detailed benchmark history](docs/benchmarks.md) explains the fixtures, hardware, limitations, and optimization results.
 
 ## Speed is not quality
 
-These numbers measure latency, not accuracy. On a 374-decision smoke set with synthetic labels created for this benchmark (not independently human-annotated), the stock English checkpoint scored 69% and the hosted Jev 1.13.0 scored 93%. That gap is specific to this set, not a general quality verdict — but treat this runtime as a fast local decision layer, not a drop-in quality match for a hosted judge, and evaluate it on your own data before trusting its answers.
+Latency is not accuracy. The public [`benchmarks/quality/`](benchmarks/quality/) suite uses synthetic labels created for the benchmark, not independent human annotations, so it is a smoke test—not evidence of production accuracy or a general quality comparison with Jev. Evaluate Laya on your own data.
 
 ## Prerequisites
 
@@ -118,7 +122,7 @@ The response mirrors the request: `{"model": "rl-agent", "answers": {id: {...}},
 
 ## What's in the repo — and what isn't
 
-**Included:** the MLX encoder with custom Metal kernels (`laya_mlx.py`), the Neural Engine export/runtime and router (`ane/`, `laya_fast.py`), the Jev-shaped request API and CLI (`laya_api.py`), the converter (`convert.py`), benchmarks, fixtures, and examples.
+**Included:** the MLX encoder with custom Metal kernels (`laya_mlx.py`), the Neural Engine export/runtime and router (`ane/`, `laya_fast.py`), the Jev-shaped request API and CLI (`laya_api.py`), the converter (`convert.py`), and the `benchmarks/`, `examples/`, and `docs/` directories.
 
 **Not included — you build them locally:**
 
@@ -136,7 +140,7 @@ Fork the repo. The seams:
 | Change the request API | `laya_api.py` — `LayaMLX.system_one` |
 | Export a new Neural Engine bucket | `ane/export.py` |
 | Re-measure the cost model | `ane/measure_costs.py`, then edit `ane/cost_model.json` |
-| Gate a change against decision parity + speed | `bash autoresearch.sh` |
+| Gate a change against decision parity + speed | `bash verify.sh` |
 
 ### Neural Engine bodies (optional acceleration)
 
@@ -156,7 +160,7 @@ done
 
 Export is slow — minutes per length, and the first compile is the expensive one. `LayaFast` uses whichever of `ane/body{64,80,96,128,256,512}` exist; a missing bucket is not an error, that length just stays on the GPU.
 
-To add a new length: export it, add it to the `ane_buckets` tuple in `LayaFast`, and put a measured milliseconds-per-question entry in `ANE_MS`. Only an in-context A/B through `bash autoresearch.sh` counts — a chain of standalone GEMM timings does not. [summary.md](summary.md) lists the dead ends from the first pass (palettization, batched ANE bodies, finer buckets, tall GEMM outside one projection).
+To add a new length: export it, add it to the `ane_buckets` tuple in `LayaFast`, and put a measured milliseconds-per-question entry in `ANE_MS`. Only an in-context A/B through `bash verify.sh` counts — a chain of standalone GEMM timings does not. [docs/benchmarks.md](docs/benchmarks.md) lists the approaches already measured.
 
 ### A different checkpoint
 
@@ -164,27 +168,27 @@ To add a new length: export it, add it to the `ane_buckets` tuple in `LayaFast`,
 
 ### Voice routing demo
 
-`laya_server.py` and `voice_commands.json` are an optional local HTTP front (default `127.0.0.1:8765`, override with `LAYA_PORT`) that maps a transcript to one action. Edit the catalog to taste; it is not required to use the model.
+The optional local voice demo lives in [`examples/voice/`](examples/voice/): `laya_server.py` plus `voice_commands.json`. It listens on `127.0.0.1:8765` by default (`LAYA_PORT` overrides the port); it is not required to use the model.
 
 ## Troubleshooting
 
 - **`converted-fp16` not found** — run the `hf download` + `convert.py` steps above, or point `--model` at your converted directory.
-- **No speedup from `fast`** — check that `ane/body*/` exists; without bodies the fast agent is the GPU path. First calls also pay `mx.compile` tracing (~50–100 ms per new shape); steady-state numbers are what the fixtures report.
+- **No speedup from `fast`** — check that `ane/body*/` exists; without bodies the fast route is the GPU path. Cold-shape measurements and compilation behavior are in [docs/benchmarks.md](docs/benchmarks.md).
 - **dtype** — fp16 is the benchmarked and recommended configuration; the table above does not describe float32.
-- **Before changing kernels or routing** — read [CONTRIBUTING.md](CONTRIBUTING.md) for the parity-first gate, and [summary.md](summary.md) for what has already been measured. Bugs and questions: [GitHub issues](https://github.com/DJLougen/laya-fast/issues).
+- **Before changing kernels or routing** — read [CONTRIBUTING.md](CONTRIBUTING.md) for the parity-first gate and [docs/benchmarks.md](docs/benchmarks.md) for measured tradeoffs. Bugs and questions: [GitHub issues](https://github.com/DJLougen/laya-fast/issues).
 
 ## Layout
 
 ```
 laya_api.py          Jev-shaped API and CLI
-laya_fast.py         ANE + GPU router (--agent fast)
+laya_fast.py         optional ANE + GPU router
 laya_mlx.py          MLX encoder, custom Metal kernels
 ane/                 Neural Engine export and runtime
+benchmarks/          benchmark tools, results, and frozen fixtures
 convert.py           PyTorch safetensors -> MLX
-benchmark.py         parity and runtime arms
-autoresearch.sh      fail-closed speed/parity gate
-summary.md           detailed measurement log, including failures
-examples/            questions-only and full-request JSON
+verify.sh            fail-closed decision-parity + speed gate
+docs/benchmarks.md   measured performance, methods, limitations
+examples/            request fixtures and optional voice demo
 ```
 
 ## License

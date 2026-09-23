@@ -8,7 +8,7 @@ In scope: the MLX encoder and Metal kernels (`laya_mlx.py`), the ANE export/runt
 
 ## The gate
 
-`bash autoresearch.sh` is the fail-closed gate. It runs the decision-parity check first, then times the deterministic fixtures. If parity fails, the run exits non-zero and no timing is reported — a faster wrong answer does not count.
+`bash verify.sh` is the fail-closed gate. It runs the decision-parity check first, then times the deterministic fixtures. If parity fails, the run exits non-zero and no timing is reported — a faster wrong answer does not count.
 
 - Run it before and after your change, on the same machine and config.
 - `LAYA_MODEL`, `LAYA_BENCH_DTYPE`, and `LAYA_AGENT` (`fast` router vs `mlx` GPU-only) select the configuration under test. Report which you used.
@@ -18,9 +18,9 @@ In scope: the MLX encoder and Metal kernels (`laya_mlx.py`), the ANE export/runt
 
 1. Fork, set up per the README (venv, `hf download`, `convert.py`).
 2. Make the change. Keep it small enough to review in one sitting.
-3. Run `bash autoresearch.sh` and paste the METRIC lines for before/after.
+3. Run `bash verify.sh` and paste the METRIC lines for before/after.
 4. In the PR, state: device (chip, GPU cores, RAM), dtype, model directory, and which fixture moved. "Faster on my machine" without the fixture table is not evidence.
-5. A standalone microbenchmark is not sufficient — only an in-context A/B through the gate counts. `summary.md` lists approaches already tried and rejected; check it before proposing one of them.
+5. A standalone microbenchmark is not sufficient — only an in-context A/B through the gate counts. [`docs/benchmarks.md`](docs/benchmarks.md) lists approaches already measured; check it before proposing one of them.
 
 ## Never commit
 

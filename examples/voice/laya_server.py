@@ -2,7 +2,7 @@
 
 Endpoints (127.0.0.1 only):
   GET  /health                     -> {"loaded": bool, ...}
-  POST /voice    text=<transcript> -> Laya picks an action from voice_commands.json and runs it
+  POST /voice    text=<transcript> -> Laya picks an action from the voice_commands.json
                  (form-encoded or JSON {"text": ...}; add dry=1 to decide without running)
   POST /v1/systemone  {"state": ..., "questions": {...}}  -> raw Laya answers (Jev shape)
 
@@ -10,7 +10,7 @@ The model loads at start (LAYA_PRELOAD=1) and unloads after LAYA_IDLE_UNLOAD_S s
 idle (default 1200) so a resident daemon doesn't hold ~1.5 GB forever; the next command
 reloads it (~2 s).
 
-Run:  .venv/bin/python laya_server.py            (port 8765, env LAYA_PORT)
+Run:  .venv/bin/python examples/voice/laya_server.py   (port 8765, env LAYA_PORT)
 """
 import gc
 import json
@@ -24,12 +24,14 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+# Repo root holds the runtime modules (laya_fast, laya_api) and the default model.
+ROOT = Path(__file__).resolve().parents[2]
+HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 PORT = int(os.environ.get("LAYA_PORT", "8765"))
 MODEL_DIR = os.environ.get("LAYA_MODEL", str(ROOT / "converted-fp16"))
-COMMANDS = Path(os.environ.get("LAYA_COMMANDS", str(ROOT / "voice_commands.json")))
+COMMANDS = Path(os.environ.get("LAYA_COMMANDS", str(HERE / "voice_commands.json")))
 IDLE_UNLOAD_S = float(os.environ.get("LAYA_IDLE_UNLOAD_S", "1200"))
 # Short on purpose: prompt + options must stay <=128 tokens to run on the Neural
 # Engine (~13 ms); a long phrasing measured ~23 ms and was no more accurate.

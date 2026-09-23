@@ -20,12 +20,12 @@ temperature bucket in rl_agent_config.json.
 
 Examples
 --------
-    python benchmark.py parity --source source --model converted
-    python benchmark.py parity --source source --model converted-fp16 --mlx-dtype float16
-    python benchmark.py parity --source source --model converted --oracle-device mps --oracle-dtype float16
-    python benchmark.py runtime --arm mlx --model converted --dtype float32 -o mlx_fp32.json
-    python benchmark.py runtime --arm torch-cpu --source source -o torch_cpu.json
-    python benchmark.py runtime --arm torch-mps --source source --dtype float16 -o torch_mps_fp16.json
+    python benchmarks/benchmark.py parity --source source --model converted
+    python benchmarks/benchmark.py parity --source source --model converted-fp16 --mlx-dtype float16
+    python benchmarks/benchmark.py parity --source source --model converted --oracle-device mps --oracle-dtype float16
+    python benchmarks/benchmark.py runtime --arm mlx --model converted --dtype float32 -o benchmarks/results/mlx_fp32.json
+    python benchmarks/benchmark.py runtime --arm torch-cpu --source source -o benchmarks/results/torch_cpu.json
+    python benchmarks/benchmark.py runtime --arm torch-mps --source source --dtype float16 -o benchmarks/results/torch_mps_fp16.json
 """
 import argparse
 import json
@@ -52,7 +52,7 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # laya_api lives beside this file
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # laya_api lives at repo root
 
 import laya_api
 from laya_api import QTYPES, QTYPE_NAMES, temp_bucket

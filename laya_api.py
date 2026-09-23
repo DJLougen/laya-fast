@@ -1,9 +1,9 @@
-"""Jev-compatible inference for the MLX port of the RL Agent (Laya) model.
+"""Jev-compatible inference for the MLX port of the Laya RL Agent model.
 
-LayaMLX mirrors source/rl_agent_api.py's RLAgent exactly: same sequence layout,
-same calibrated post-processing, same response shape. Token preparation is pure
-`tokenizers` + numpy (no torch required); the forward pass goes through
-laya_mlx.load_model.
+This request API ports/adapts the Apache-2.0 reference behavior from Laya's
+``rl_agent_api.py`` (source revision and notices are recorded in ``NOTICE``).
+The original PyTorch runtime is replaced by tokenizers/numpy preparation and
+the MLX model in ``laya_mlx``.
 
 Usage:
     agent = LayaMLX("converted")            # dir produced by convert.py

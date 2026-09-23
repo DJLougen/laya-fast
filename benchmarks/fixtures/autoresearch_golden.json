@@ -1,5 +1,5 @@
 {
- "_note": "Frozen decision reference for autoresearch.sh. Regenerate ONLY with an explicit, justified --write-golden run.",
+ "_note": "Frozen decision reference for verify.sh. Regenerate ONLY with an explicit, justified --write-golden run.",
  "_dtype": "float32",
  "_mlx": "0.32.2",
  "fixtures": {

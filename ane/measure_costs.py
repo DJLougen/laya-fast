@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "benchmarks"))
 
 import benchmark
 import laya_api
@@ -82,7 +83,7 @@ def main():
             print("mlx n=%d L=%d: %.2f ms" % (n, L, report["mlx_batch_ms"]["%d@%d" % (n, L)]),
                   file=sys.stderr)
 
-    Path("ane/cost_model.json").write_text(json.dumps(report, indent=2) + "\n")
+    Path(__file__).resolve().parent.joinpath("cost_model.json").write_text(json.dumps(report, indent=2) + "\n")
     print("wrote ane/cost_model.json", file=sys.stderr)
 
 

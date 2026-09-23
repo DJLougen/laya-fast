@@ -4,7 +4,7 @@ Two jobs, in this order:
 
   1. Correctness gate (fail-closed). Every fixture is run through the real
      ``LayaMLX.system_one`` entrypoint and the formatted answers are compared
-     against a frozen golden reference (``autoresearch_golden.json``) produced
+     against a frozen golden reference (``benchmarks/fixtures/autoresearch_golden.json``) produced
      from the baseline runtime. Choice/score labels must match EXACTLY and every
      probability must land within tolerance. A missing or unreadable golden file
      is a hard failure -- the harness never regenerates it implicitly.
@@ -17,9 +17,9 @@ Primary metric is ``single_short_p50_ms``; p50 is used rather than mean so a
 single thermal spike cannot decide a keep/discard.
 
 Usage:
-    python bench_autoresearch.py                 # gate + benchmark, emits METRIC lines
-    python bench_autoresearch.py --write-golden  # regenerate the golden reference
-    python bench_autoresearch.py --quick         # fewer samples, for harness debugging
+    python benchmarks/bench_autoresearch.py                 # gate + benchmark, emits METRIC lines
+    python benchmarks/bench_autoresearch.py --write-golden  # regenerate the golden reference
+    python benchmarks/bench_autoresearch.py --quick         # fewer samples, for harness debugging
 """
 import argparse
 import json
@@ -30,10 +30,12 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
+BENCH_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(BENCH_DIR))
 
-GOLDEN_PATH = ROOT / "autoresearch_golden.json"
+GOLDEN_PATH = BENCH_DIR / "fixtures" / "autoresearch_golden.json"
 
 # Decision-equivalence tolerances. Loose enough that a precision change
 # (fp32 -> fp16/bf16 compute) can still pass, tight enough that deleted or
@@ -226,7 +228,7 @@ def main(argv=None):
     if args.write_golden:
         current = run_all(agent, fixtures)
         payload = {
-            "_note": "Frozen decision reference for autoresearch.sh. Regenerate ONLY "
+            "_note": "Frozen decision reference for verify.sh. Regenerate ONLY "
                      "with an explicit, justified --write-golden run.",
             "_dtype": args.dtype,
             "_mlx": getattr(mx, "__version__", "unknown"),

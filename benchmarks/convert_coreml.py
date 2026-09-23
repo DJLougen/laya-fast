@@ -1,8 +1,8 @@
 """Convert the Laya RL-Agent decision model to Apple Core ML (.mlpackage).
 
 Usage:
-    python convert_coreml.py --source source --output laya_decision.mlpackage
-    python convert_coreml.py --benchmark laya_decision.mlpackage
+    python benchmarks/convert_coreml.py --source source --output laya_decision.mlpackage
+    python benchmarks/convert_coreml.py --benchmark laya_decision.mlpackage
 """
 import argparse
 import os
@@ -10,7 +10,8 @@ import sys
 import time
 import numpy as np
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "source"))
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(_ROOT, "source"))
 import torch
 import coremltools as ct
 from coremltools.converters.mil.mil import Builder as mb
@@ -61,6 +62,7 @@ def convert_model(source_dir, output_path, seq_len=128, max_options=4):
         minimum_deployment_target=ct.target.macOS14,
         compute_precision=ct.precision.FLOAT32,
     )
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     mlmodel.save(output_path)
     print(f"Saved Core ML package to {output_path}")
     return mlmodel
@@ -102,8 +104,8 @@ def benchmark_coreml(model_path, seq_len=128, max_options=4, samples=30):
 
 def main():
     parser = argparse.ArgumentParser(description="Core ML conversion and benchmark tool for Laya")
-    parser.add_argument("--source", default="source", help="source directory with original PyTorch checkpoint")
-    parser.add_argument("--output", default="laya_decision.mlpackage", help="path to save .mlpackage")
+    parser.add_argument("--source", default=os.path.join(_ROOT, "source"), help="source directory with original PyTorch checkpoint")
+    parser.add_argument("--output", default=os.path.join(_ROOT, "benchmarks", "results", "laya_decision.mlpackage"), help="path to save .mlpackage")
     parser.add_argument("--benchmark", default=None, help="path to .mlpackage to benchmark")
     parser.add_argument("--seq-len", type=int, default=128, help="sequence length for export/benchmark")
     args = parser.parse_args()

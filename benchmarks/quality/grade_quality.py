@@ -99,7 +99,7 @@ def grade(path, expected, protocol):
 
 
 def main():
-    p=argparse.ArgumentParser(); p.add_argument('results',nargs='+'); p.add_argument('--output',default='quality_summary.json')
+    p=argparse.ArgumentParser(); p.add_argument('results',nargs='+'); p.add_argument('--output',default=str(ROOT.parent/'results'/'quality_summary.json'))
     args=p.parse_args()
     expected=json.loads((ROOT/'quality_expected.json').read_text())
     protocol=json.loads((ROOT/'quality_protocol.json').read_text())
@@ -111,7 +111,7 @@ def main():
         assert name not in summaries
         summaries[name]=summary; per_arm[name]=rows
         all_rows.extend(dict(arm=name,**r) for r in rows)
-    out=Path(args.output)
+    out=Path(args.output); out.parent.mkdir(parents=True,exist_ok=True)
     paired={}
     if len(per_arm)==2:
         names=list(per_arm); a,b=(per_arm[n] for n in names)

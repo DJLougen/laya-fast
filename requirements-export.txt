@@ -1,7 +1,7 @@
 # Optional: Core ML / Neural Engine support — exporting .mlpackage bodies
-# (convert_coreml.py, ane/export*.py, ane/palettize.py, ane/ane_model.py),
+# (benchmarks/convert_coreml.py, ane/export*.py, ane/palettize.py, ane/ane_model.py),
 # running them via --agent fast (ane/ane_runtime.py loads bodies through
-# coremltools), and the PyTorch reference oracle (benchmark.py /
+# coremltools), and the PyTorch reference oracle (benchmarks/benchmark.py /
 # source/rl_common.py). Install on top of the base requirements:
 #   .venv/bin/pip install -r requirements-export.txt
 

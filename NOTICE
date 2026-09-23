@@ -1,14 +1,52 @@
 Laya Fast
 Copyright 2026 DJ Lougen
 
-This project is an independent Apple Silicon runtime for the Laya decision
-model. It is not an official Convai Innovations release.
+Laya Fast is an independent Apple Silicon runtime for the Laya decision model.
+It is not an official Convai Innovations or Apple release.
 
-Laya weights and the original training code are Copyright Convai Innovations
-and licensed under the Apache License, Version 2.0. Download them from
-https://huggingface.co/convaiinnovations/laya — they are not included here.
+Convai Innovations created Laya. This repository's MLX model and request API
+port/adapt the Apache-2.0 Laya inference implementation:
+https://huggingface.co/convaiinnovations/laya
+Copyright Convai Innovations and Laya contributors.
+Source revision: 1c5edc17a7acd8701df6fc341c0d179f1c62c982.
+Changes: the upstream PyTorch model/inference path is reimplemented for MLX and
+tokenizers; the original training source files and model weights are not part
+of the public repository. Weights are downloaded separately.
 
-The Neural Engine body is a ModernBERT port of the BC1S / 1x1-conv rewrite
-approach used by mizorewww/laya-mlx. That repository is a separate MLX port.
-This tree adds the ANE + GPU router (LayaFast) and the measurement log in
-summary.md.
+The ANE body in ane/ane_model.py is ported/adapted from
+experiments/ane_engineering/model.py in mizorewww/laya-coreml:
+https://github.com/mizorewww/laya-coreml
+Copyright 2026 laya-coreml contributors; licensed under Apache-2.0.
+Source revision: 4619e0483f07adf39068532e85b42ec2347edb83.
+Changes: the model-object wrapper was refactored for direct English-checkpoint
+tensor/config inputs; this repository adds its fixed-bucket exporter, runtime,
+and MLX/ANE router. The upstream NOTICE is reproduced below.
+
+--- Upstream NOTICE from mizorewww/laya-coreml (retained) ---
+
+laya-coreml
+Copyright 2026 laya-coreml contributors
+
+This product includes software adapted from Laya (Apache-2.0):
+https://github.com/NandhaKishorM/laya
+Copyright Convai Innovations and Laya contributors.
+Upstream source revision: 573e5b62696ba441230cd6be71d593331b5d23af
+
+Prompt construction, tokenization, result formatting, validation fixtures,
+the ModernBERT architecture implementation, and the Snake game, policy, terminal
+UI, recording/export and benchmark tools are adapted from laya-mlx:
+https://github.com/mizorewww/laya-mlx
+Copyright 2026 laya-mlx contributors. Licensed under Apache-2.0.
+Adapted revision: fc1df62828a3fedf4d8229fdac1cbd85f1cdf337
+Changes: Core ML runtime, export-only PyTorch graph, fixed/ranged shape input
+handling, Core ML validation, device planning, and performance measurement;
+ANE graph/runtime, portable model bundles and offline Core ML Snake integration.
+
+The model follows Laya's DecisionModel and Hugging Face Transformers ModernBERT.
+Original checkpoint weights belong to their respective upstream authors and
+are downloaded separately. No weights are included in this repository.
+This is an independent project, not an official Convai Innovations or Apple
+release.
+
+Benchmark methodology, results, and historical optimization notes are in
+docs/benchmarks.md.

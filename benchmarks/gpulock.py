@@ -1,6 +1,6 @@
 """Serialize GPU timing runs across concurrent agents/processes.
 
-Usage:  .venv/bin/python gpulock.py -- <command> [args...]
+Usage:  .venv/bin/python benchmarks/gpulock.py -- <command> [args...]
 Holds an exclusive fcntl lock on /tmp/laya_gpu.lock for the lifetime of the
 command, so two benchmarks never share the GPU and corrupt each other's timings.
 """

@@ -1,8 +1,8 @@
-"""Dry-run accuracy check of the voice router against a running laya_server.py.
+"""Dry-run accuracy check of the voice router against a running examples/voice/laya_server.py.
 Nothing is executed (dry=1). Utterances are written the way Superwhisper
 transcribes speech (capitalised, trailing period).
 
-Run: .venv/bin/python voice_eval.py
+Run: .venv/bin/python examples/voice/voice_eval.py
 """
 import json
 import urllib.parse

@@ -1,0 +1,33 @@
+{
+  "date": "2026-09-23",
+  "purpose": "Fresh parity-gated LayaFast confirmation run after the documentation and repository-layout reorganization; this is not a new paired MLX baseline comparison.",
+  "command": "bash verify.sh",
+  "runtime": "LayaFast (optional ANE + MLX router)",
+  "model": "converted-fp16",
+  "dtype": "float16",
+  "compiled": true,
+  "samples": 25,
+  "warmups": 5,
+  "mlx_version": "0.32.2",
+  "parity_gate": {
+    "result": "PASS",
+    "max_abs_logit_diff": 0.0504804,
+    "max_abs_probability_diff": 0.0073
+  },
+  "fixtures": {
+    "single_short": {"p50_ms": 9.572, "min_ms": 9.478, "p90_ms": 9.78, "std_ms": 0.15},
+    "batch8_short": {"p50_ms": 41.728, "min_ms": 40.96, "p90_ms": 42.33, "std_ms": 0.73},
+    "single_long": {"p50_ms": 54.227, "min_ms": 53.39, "p90_ms": 54.76, "std_ms": 0.43},
+    "batch8_long": {"p50_ms": 210.76, "min_ms": 210.08, "p90_ms": 232.74, "std_ms": 8.6}
+  },
+  "total_p50_ms": 316.288,
+  "model_load_seconds": 3.188,
+  "host": {
+    "chip": "Apple M3 Max",
+    "gpu_cores": 30,
+    "unified_memory_gb": 36,
+    "platform": "macOS 27.2 arm64"
+  },
+  "source_commit": "07663c98b51d9d3d54d80174fc1ee1e8d2b89c12",
+  "source_tree_note": "The working tree had documentation/file-layout edits pending; executable model/runtime logic was unchanged from source_commit. The commit's later attribution-only docstring edits occurred after this run."
+}

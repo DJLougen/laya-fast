@@ -1,6 +1,6 @@
-# Laya MLX & Core ML Optimization Project Summary
+# Laya Benchmarks & Optimization Notes
 
-> **Scope:** Technical notes on the optimization and conversion work done on `convaiinnovations/laya` (a 28-layer bidirectional ModernBERT-large backbone + RL decision head). It records what was tried, what succeeded, what failed (with failure reasons and root causes), benchmark tables, and how to run and extend the code. All measurements were taken on the hardware described in §1.
+> **Scope:** Technical notes on the optimization and conversion work done on `convaiinnovations/laya` (a 28-layer bidirectional ModernBERT-large backbone + RL decision head). It records what was tried, what succeeded, what failed (with failure reasons and root causes), benchmark tables, and how to run and extend the code. All measurements were taken on the hardware described in §1. Raw per-run records live in `benchmarks/results/`; the frozen parity/speed reference is `benchmarks/fixtures/autoresearch_golden.json`.
 
 ---
 
@@ -30,8 +30,8 @@
 | **Core ML: Raw Export** | `coremltools.convert(torch.export.export(model, ...))` | ❌ **Failed** | `NotImplementedError`: Dialect `TRAINING` not supported by coremltools frontend. | Invoked `exp.run_decompositions()` prior to `ct.convert()` to normalize to ATEN dialect. |
 | **Core ML: Dialect Bridging** | `ct.convert(exp.run_decompositions())` | ❌ **Failed** | `NotImplementedError: Unsupported fx node alias, kind alias` (PyTorch 2.14 vs coremltools 9.0 gap). | Registered custom torch converter mapping `alias` and `aten.alias.default` to `mb.identity`. |
 | **Core ML: MIL Conversion** | Converting decomposed FX graph with alias bypass | ❌ **Failed at 99%** | `ValueError: Op "gather" Input indices="expand_214" expects ['int32', ...] but got tensor[..., fp32]`. | Discovered coremltools `clamp` bug: missing `max` promotes integers to `float32` via `finfo(float32).max`. Registered patched `gather` op auto-casting indices to `int32`. |
-| **Core ML Execution** | Generating & running `laya_decision.mlpackage` | ⚠️ **Suboptimal** | Model converted and ran, but latency was **22.35 ms** on GPU (`ComputeUnit.ALL`) and **103.14 ms** on ANE (`CPU_AND_NE`), with **5.13 s** startup load time. | Saved standalone export pipeline to `convert_coreml.py`, but prioritized Native Apple MLX as the primary production runtime. |
-| **MLX: JIT Compilation** | Wrapping MLX model in `mx.compile(self.model)` | ✅ **Succeeded** | Reduced kernel dispatch overhead; forward latency dropped from ~18.9 ms to ~18.2 ms p50; batch-8 long dropped from 516.9 ms to 502.0 ms. | Integrated into `laya_mlx.py` and added `--compile` flag to `laya_api.py` and `benchmark.py`. |
+| **Core ML Execution** | Generating & running `laya_decision.mlpackage` | ⚠️ **Suboptimal** | Model converted and ran, but latency was **22.35 ms** on GPU (`ComputeUnit.ALL`) and **103.14 ms** on ANE (`CPU_AND_NE`), with **5.13 s** startup load time. | Saved standalone export pipeline to `benchmarks/convert_coreml.py`, but prioritized Native Apple MLX as the primary production runtime. |
+| **MLX: JIT Compilation** | Wrapping MLX model in `mx.compile(self.model)` | ✅ **Succeeded** | Reduced kernel dispatch overhead; forward latency dropped from ~18.9 ms to ~18.2 ms p50; batch-8 long dropped from 516.9 ms to 502.0 ms. | Integrated into `laya_mlx.py` and added `--compile` flag to `laya_api.py` and `benchmarks/benchmark.py`. |
 | **MLX: Built-in Fast RoPE** | Using `mx.fast.rope(..., traditional=False)` | ⚠️ **Mixed** | Matched `_apply_rope` within 6.7e-6, but still required separate transpose and unpack operations for Q, K, and V. | Replaced by a unified custom Metal kernel combining QKV unpacking, RoPE math, and transpose in one pass. |
 | **Custom Metal: GeGLU** | Writing custom MSL kernel calling `metal::erf` | ❌ **Failed** | Compilation error: Metal Shading Language stdlib lacks `erf` in namespace `metal`. | Ported faithfully-rounded error function polynomial (`custom_erf` + `expm1f_scaled_unchecked`) into MSL kernel header. |
 | **Custom Metal: Fused GeGLU** | Single-pass MSL kernel for GLU split + exact ERF + gate multiply | ✅ **Succeeded** | Numerical diff vs PyTorch reference `< 1e-6`. Cut DRAM traffic by 66%, saving **~2.12 ms** across all 28 layers. | Integrated `_fused_geglu_kernel` into `laya_mlx.MLP.__call__`. |
@@ -40,7 +40,9 @@
 
 ---
 
-## 3. Comprehensive Performance Benchmark Matrix
+## 3. Comprehensive Performance Benchmark Matrix (historical — FP32 round)
+
+> **Superseded:** these FP32 numbers predate the fp16 + Neural Engine round in §3b, which is the current shipping configuration. They are kept as historical evidence; the raw records are `benchmarks/results/runtime_*.json` and `benchmarks/results/parity_*.json`, with `benchmarks/results/runtime_summary.json` as the canonical aggregate record of this round.
 
 All benchmarks measured on **Apple M3 Max (36 GB Unified Memory)** across identical fixtures (15 timed runs, 3 warmups):
 
@@ -61,7 +63,7 @@ All benchmarks measured on **Apple M3 Max (36 GB Unified Memory)** across identi
 
 ## 3b. Optimization round (2026-09-22): speed work after fp16 — verified results
 
-All numbers below are from interleaved A/B runs inside one process (cross-process drift on this Mac is up to ~7%), fp16 weights (`converted-fp16`), `compile=True`, M3 Max 30-core GPU. The gate is `bash autoresearch.sh`, fail-closed against `autoresearch_golden.json`.
+All numbers below are from interleaved A/B runs inside one process (cross-process drift on this Mac is up to ~7%), fp16 weights (`converted-fp16`), `compile=True`, M3 Max 30-core GPU. The gate is the root `verify.sh` script, fail-closed against `benchmarks/fixtures/autoresearch_golden.json`.
 
 **New MLX defaults vs baseline** (interleaved A/B harness, 3 rounds, medians):
 
@@ -73,7 +75,7 @@ All numbers below are from interleaved A/B runs inside one process (cross-proces
 | batch8_long (8×512) | 373.94 ms | 373.73 ms | 1.001× (noise) |
 | First call at a never-seen length | 76–80 ms | 10.7–15.1 ms | ~6× |
 
-`autoresearch.sh` after integration: `[gate] PASS max|dlogit|=2.205e-02 max|dprob|=2.000e-03`, single_short 13.83, batch8_short 64.54, single_long 53.60, batch8_long 374.09 ms. The logit drift rose from 1.4e-2 because bucketing's masked padding changes fp16 reduction order. Consumed probabilities moved ≤ 4e-4 bucketed vs exact-shape across 10 cases, with no label flips.
+The gate (then `autoresearch.sh`, now `verify.sh`) after integration: `[gate] PASS max|dlogit|=2.205e-02 max|dprob|=2.000e-03`, single_short 13.83, batch8_short 64.54, single_long 53.60, batch8_long 374.09 ms. The logit drift rose from 1.4e-2 because bucketing's masked padding changes fp16 reduction order. Consumed probabilities moved ≤ 4e-4 bucketed vs exact-shape across 10 cases, with no label flips.
 
 | Change | What it does | Evidence | Off switch |
 | :--- | :--- | :--- | :--- |
@@ -108,7 +110,7 @@ The ANE gate passes (`max|dprob|=7.3e-3`). The old 103 ms "ANE" number in the ta
 
 The overlap is real: 4 sequential ANE calls take 207 ms while the GPU finishes its own 4 in ~190 ms. Single long questions stay on MLX — one question cannot be overlapped, and the engines tie.
 
-Final state, both gates PASS (`bash autoresearch.sh` and `bench_autoresearch.py --agent fast`); memory is the macOS `footprint` of the whole process, including GPU buffers:
+Final state, both gates PASS (the root parity/speed gate and the autoresearch benchmark runner); memory is the macOS `footprint` of the whole process, including GPU buffers:
 
 | | single_short | batch8_short | single_long | batch8_long | Process memory |
 | :--- | ---: | ---: | ---: | ---: | ---: |
@@ -162,20 +164,24 @@ Located in `laya_mlx.py`:
 Tracked source and evidence:
 
 ```
-laya-mlx/
+laya-fast/
 ├── laya_mlx.py                 # Core MLX neural network architecture with custom Metal kernels
 ├── laya_api.py                 # High-level Jev-compatible RLAgent API (prepare, raw_forward, system_one)
 ├── laya_fast.py                # MLX+ANE router (fastest configuration)
 ├── tall_gemm.py                # Custom simdgroup-MMA kernel for the encoder Wi projection
 ├── dedup.py                    # One forward per unique question
-├── benchmark.py                # Parity & runtime benchmark suite (CPU, MPS, MLX)
 ├── convert.py                  # Weight converter from PyTorch safetensors to MLX safetensors
-├── convert_coreml.py           # Standalone Core ML export & benchmark tool (with dialect/clamp patches)
+├── verify.sh                   # Fail-closed parity/speed gate (root entry point)
+├── benchmarks/                 # Benchmark suite, runners, and evidence
+│   ├── benchmark.py            # Parity & runtime benchmark suite (CPU, MPS, MLX)
+│   ├── bench_autoresearch.py   # Autoresearch benchmark runner (invoked by verify.sh)
+│   ├── convert_coreml.py       # Standalone Core ML export & benchmark tool (with dialect/clamp patches)
+│   ├── fixtures/autoresearch_golden.json  # Frozen decision reference for the gate
+│   ├── quality/                # Quality suite, runner, grader, plus `quality_expected.json` (labels) and `quality_protocol.json` (scoring protocol)
+│   └── results/                # Recorded benchmark outputs (runtime_*.json, parity_*.json, environment.json, download_integrity.json)
 ├── ane/                        # Neural Engine export, cost model, and verification scripts
 ├── examples/                   # Sample request/question fixtures
-├── runtime_*.json              # Recorded benchmark outputs per runtime/dtype
-├── autoresearch.sh + autoresearch_golden.json  # Fail-closed parity/speed gate
-└── download_integrity.json     # Pinned revision SHA256 hashes of original checkpoint
+└── docs/benchmarks.md          # This document
 ```
 
 Model artifacts (`converted/`, `converted-fp16/`, `source/`, `*.mlpackage`, compiled `.mlmodelc` bodies) are generated locally by the conversion/export scripts and are not tracked in the repository.
@@ -209,8 +215,11 @@ Run from the repository root:
 
 ```bash
 # Run MLX FP32 benchmark with custom Metal kernels and JIT compilation:
-.venv/bin/python benchmark.py runtime --arm mlx --model converted --dtype float32 --compile
+.venv/bin/python benchmarks/benchmark.py runtime --arm mlx --model converted --dtype float32 --compile
 
 # Run Core ML benchmark:
-.venv/bin/python convert_coreml.py --benchmark laya_decision.mlpackage
+.venv/bin/python benchmarks/convert_coreml.py --benchmark laya_decision.mlpackage
+
+# Run the fail-closed parity/speed gate:
+bash verify.sh
 ```

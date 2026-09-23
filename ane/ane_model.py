@@ -1,8 +1,10 @@
 """BC1S/Conv transformer for fixed-shape ANE export of the English Laya model.
 
-Port of mizorewww/laya-coreml experiments/ane_engineering/model.py to the
-English checkpoint (ModernBERT-large: hidden 1024, 16 heads, GLU 2624, 28
-layers, alternating full/sliding attention, per-layer-type RoPE thetas).
+Port/adaptation of mizorewww/laya-coreml's
+experiments/ane_engineering/model.py (Apache-2.0; source revision and notices
+are recorded in the repository NOTICE). This version targets the English
+ModernBERT checkpoint and loads its tensors/config directly instead of a source
+model object.
 
 Layout follows Apple's ml-ane-transformers principles: activations are
 [B, C, 1, L], dense weights become 1x1 conv kernels, attention is per-head

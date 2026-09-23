@@ -11,9 +11,9 @@ retrace, so it is reported separately.
 
 Before/after: run with the fix flags off to reproduce the old behaviour:
     LAYA_BUCKET=0 LAYA_COLD_DISPATCH=0 LAYA_COMPILE_PACKED=1 \
-        .venv/bin/python gpulock.py -- .venv/bin/python bench_cold_shapes.py
+        .venv/bin/python benchmarks/gpulock.py -- .venv/bin/python benchmarks/bench_cold_shapes.py
 vs the new defaults:
-    .venv/bin/python gpulock.py -- .venv/bin/python bench_cold_shapes.py
+    .venv/bin/python benchmarks/gpulock.py -- .venv/bin/python benchmarks/bench_cold_shapes.py
 """
 import os
 import sys
@@ -22,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 N_SINGLE = 30

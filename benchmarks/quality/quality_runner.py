@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Raw-output quality runner for the Laya-vs-Jev comparison.
 
-Runs the frozen 105-case suite (quality_suite.py, byte-identical copy of
-jev-gliner-x-post/suite_large.py, sha256 pinned in quality_protocol.json) against
-one of four runtimes and writes raw, ungraded outputs:
+Runs the frozen 105-case suite in quality_suite.py (its SHA-256 is pinned in
+quality_protocol.json) against one of four runtimes and writes raw, ungraded
+outputs:
 
   --runtime jev   TypeSafe Jev via POST https://api.typesafe.ai/v1/systemone,
                   model jev-latest (httpx, one connection, bounded 429 retry).
@@ -33,11 +33,11 @@ single case may carry the total past 100k before the next check stops the run. C
 (no verified price).
 
 Usage:
-  python quality_runner.py --runtime jev --output results_jev.json
-  python quality_runner.py --runtime mlx --model converted --dtype float32 --output results_mlx.json
-  python quality_runner.py --runtime cpu --source source --output results_cpu.json
-  python quality_runner.py --runtime mps --source source --output results_mps.json
-  python quality_runner.py --dump-requests quality_requests.json   # no inference
+  python benchmarks/quality/quality_runner.py --runtime jev --output benchmarks/results/results_jev.json
+  python benchmarks/quality/quality_runner.py --runtime mlx --model converted --dtype float32 --output benchmarks/results/results_mlx.json
+  python benchmarks/quality/quality_runner.py --runtime cpu --source source --output benchmarks/results/results_cpu.json
+  python benchmarks/quality/quality_runner.py --runtime mps --source source --output benchmarks/results/results_mps.json
+  python benchmarks/quality/quality_runner.py --dump-requests benchmarks/results/quality_requests.json   # no inference
 """
 import argparse
 import hashlib
@@ -49,7 +49,9 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
+sys.path.insert(0, ROOT)
 
 from quality_suite import (TASKS, ACTION_LABELS, COND_LABELS, COND_PLAIN, ASPECT_LABELS,
                            ENT_LABELS, SEV_LEVELS, CONFIRM_RULE)
@@ -426,9 +428,9 @@ def main():
     ap.add_argument("--runtime", choices=["jev", "mlx", "cpu", "mps"],
                     help="jev = TypeSafe API; mlx = converted checkpoint via laya_api.LayaMLX; "
                          "cpu/mps = original source checkpoint via RLAgent")
-    ap.add_argument("--source", default=os.path.join(HERE, "source"),
+    ap.add_argument("--source", default=os.path.join(ROOT, "source"),
                     help="original checkpoint dir (cpu/mps runtimes)")
-    ap.add_argument("--model", default=os.path.join(HERE, "converted"),
+    ap.add_argument("--model", default=os.path.join(ROOT, "converted"),
                     help="converted model dir (mlx runtime)")
     ap.add_argument("--dtype", default="float32", help="mlx runtime dtype")
     ap.add_argument("--output", default=None, help="results JSON path")
@@ -456,7 +458,7 @@ def main():
     if not args.runtime:
         ap.error("--runtime is required unless --dump-requests is given")
 
-    out_path = args.output or os.path.join(HERE, f"results_{args.runtime}.json")
+    out_path = args.output or os.path.join(ROOT, "benchmarks", "results", f"results_{args.runtime}.json")
 
     doc = {
         "model": JEV_MODEL if args.runtime == "jev" else f"rl-agent/{args.runtime}",
@@ -480,6 +482,7 @@ def main():
     }
 
     def save():
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
         with open(out_path, "w") as f:
             json.dump(doc, f, indent=2, ensure_ascii=False)
 

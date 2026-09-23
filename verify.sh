@@ -15,4 +15,4 @@ fi
 # LAYA_MODEL / LAYA_BENCH_DTYPE select the configuration under test; LAYA_AGENT
 # picks the runtime (fast = LayaFast ANE+MLX router, default; mlx = GPU only).
 export LAYA_BENCH_DTYPE="${LAYA_BENCH_DTYPE:-float16}"
-exec "$PY" bench_autoresearch.py --model "${LAYA_MODEL:-converted-fp16}" "$@"
+exec "$PY" benchmarks/bench_autoresearch.py --model "${LAYA_MODEL:-converted-fp16}" "$@"
