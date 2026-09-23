@@ -1,0 +1,11 @@
+# Apple Silicon runtime
+mlx==0.32.2
+numpy
+safetensors
+huggingface_hub
+tokenizers
+transformers
+
+# Only needed to convert weights or export Neural Engine bodies
+torch
+coremltools

@@ -1,0 +1,96 @@
+{
+  "length": 80,
+  "model": "converted-fp16",
+  "compute_units": "cpu_ne",
+  "conversion_seconds": 33.31,
+  "load_compile_seconds": 34.15,
+  "compute_plan": {
+    "kind": "Core ML anticipated execution plan, not a runtime hardware trace",
+    "preferred_operation_counts": {
+      "unknown": 5941,
+      "MLNeuralEngineComputeDevice": 10594
+    },
+    "supported_operation_counts": {
+      "MLCPUComputeDevice": 10594,
+      "MLNeuralEngineComputeDevice": 10594
+    },
+    "estimated_cost_by_device": {
+      "MLNeuralEngineComputeDevice": 1.000000000000034
+    },
+    "non_ane_ops": {
+      "const": {
+        "unknown": 5941
+      },
+      "ios18.layer_norm": {
+        "MLNeuralEngineComputeDevice": 62
+      },
+      "ios18.mul": {
+        "MLNeuralEngineComputeDevice": 4149
+      },
+      "ios18.conv": {
+        "MLNeuralEngineComputeDevice": 122
+      },
+      "split": {
+        "MLNeuralEngineComputeDevice": 1044
+      },
+      "ios18.sub": {
+        "MLNeuralEngineComputeDevice": 896
+      },
+      "ios18.add": {
+        "MLNeuralEngineComputeDevice": 1437
+      },
+      "ios18.concat": {
+        "MLNeuralEngineComputeDevice": 926
+      },
+      "ios18.transpose": {
+        "MLNeuralEngineComputeDevice": 480
+      },
+      "ios16.einsum": {
+        "MLNeuralEngineComputeDevice": 961
+      },
+      "ios18.softmax": {
+        "MLNeuralEngineComputeDevice": 480
+      },
+      "ios18.gelu": {
+        "MLNeuralEngineComputeDevice": 29
+      },
+      "ios18.batch_norm": {
+        "MLNeuralEngineComputeDevice": 5
+      },
+      "ios18.relu": {
+        "MLNeuralEngineComputeDevice": 2
+      },
+      "ios18.slice_by_index": {
+        "MLNeuralEngineComputeDevice": 1
+      }
+    }
+  },
+  "timing": {
+    "samples": 30,
+    "mean_ms": 9.369180466940938,
+    "p50_ms": 9.36185399768874,
+    "p95_ms": 9.467266537831165,
+    "min_ms": 9.226666006725281,
+    "max_ms": 9.53233300242573
+  },
+  "outputs": {
+    "var_17331": {
+      "shape": [
+        1,
+        1024,
+        1,
+        1
+      ],
+      "finite": true
+    },
+    "var_17311": {
+      "shape": [
+        1,
+        1,
+        1,
+        32
+      ],
+      "finite": true
+    }
+  }
+}

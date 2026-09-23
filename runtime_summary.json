@@ -1,0 +1,531 @@
+{
+  "parity_english": {
+    "max_logit_err": 3.528594970703125e-05,
+    "max_prob_err": 2.2351741790771484e-06,
+    "max_act_err": 0.00390625,
+    "qtypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "temp_buckets": [
+      "choice:11+",
+      "choice:2",
+      "choice:3-5",
+      "choice:6-10",
+      "noul:2",
+      "score:3-5",
+      "score:6-10"
+    ],
+    "n_cases": 5,
+    "pass": true
+  },
+  "parity_typed": {
+    "max_logit_err": 1.2755393981933594e-05,
+    "max_prob_err": 5.7220458984375e-06,
+    "max_act_err": 0.02099609375,
+    "qtypes": [
+      "choice",
+      "noul",
+      "score"
+    ],
+    "temp_buckets": [
+      "choice:11+",
+      "choice:2",
+      "choice:3-5",
+      "choice:6-10",
+      "noul:2",
+      "score:3-5",
+      "score:6-10"
+    ],
+    "n_cases": 5,
+    "pass": false
+  },
+  "runtimes": {
+    "cpu_t1": {
+      "arm": "torch-cpu",
+      "dtype": "float32",
+      "threads": 1,
+      "load_s": 24.021,
+      "cases": {
+        "single_short": {
+          "p50_ms": 105.797,
+          "mean_ms": 105.92,
+          "min_ms": 105.434,
+          "max_ms": 106.733,
+          "n_questions": 1,
+          "input_tokens": 74,
+          "samples": 15
+        },
+        "batch8_short": {
+          "p50_ms": 716.336,
+          "mean_ms": 711.852,
+          "min_ms": 682.976,
+          "max_ms": 729.761,
+          "n_questions": 8,
+          "input_tokens": 640,
+          "samples": 15
+        },
+        "single_long": {
+          "p50_ms": 625.754,
+          "mean_ms": 625.916,
+          "min_ms": 621.782,
+          "max_ms": 630.164,
+          "n_questions": 1,
+          "input_tokens": 512,
+          "samples": 15
+        },
+        "batch8_long": {
+          "p50_ms": 4670.232,
+          "mean_ms": 4667.485,
+          "min_ms": 4572.302,
+          "max_ms": 4773.531,
+          "n_questions": 8,
+          "input_tokens": 4096,
+          "samples": 15
+        }
+      }
+    },
+    "cpu_t4": {
+      "arm": "torch-cpu",
+      "dtype": "float32",
+      "threads": 4,
+      "load_s": 23.416,
+      "cases": {
+        "single_short": {
+          "p50_ms": 79.071,
+          "mean_ms": 79.234,
+          "min_ms": 78.117,
+          "max_ms": 82.004,
+          "n_questions": 1,
+          "input_tokens": 74,
+          "samples": 15
+        },
+        "batch8_short": {
+          "p50_ms": 363.11,
+          "mean_ms": 364.632,
+          "min_ms": 361.124,
+          "max_ms": 378.541,
+          "n_questions": 8,
+          "input_tokens": 640,
+          "samples": 15
+        },
+        "single_long": {
+          "p50_ms": 300.971,
+          "mean_ms": 301.753,
+          "min_ms": 295.588,
+          "max_ms": 317.45,
+          "n_questions": 1,
+          "input_tokens": 512,
+          "samples": 15
+        },
+        "batch8_long": {
+          "p50_ms": 1997.247,
+          "mean_ms": 2012.545,
+          "min_ms": 1983.386,
+          "max_ms": 2137.369,
+          "n_questions": 8,
+          "input_tokens": 4096,
+          "samples": 15
+        }
+      }
+    },
+    "cpu_t8": {
+      "arm": "torch-cpu",
+      "dtype": "float32",
+      "threads": 8,
+      "load_s": 30.318,
+      "cases": {
+        "single_short": {
+          "p50_ms": 87.606,
+          "mean_ms": 231.797,
+          "min_ms": 82.534,
+          "max_ms": 799.036,
+          "n_questions": 1,
+          "input_tokens": 74,
+          "samples": 15
+        },
+        "batch8_short": {
+          "p50_ms": 334.554,
+          "mean_ms": 336.841,
+          "min_ms": 331.723,
+          "max_ms": 356.52,
+          "n_questions": 8,
+          "input_tokens": 640,
+          "samples": 15
+        },
+        "single_long": {
+          "p50_ms": 261.818,
+          "mean_ms": 262.284,
+          "min_ms": 261.082,
+          "max_ms": 264.859,
+          "n_questions": 1,
+          "input_tokens": 512,
+          "samples": 15
+        },
+        "batch8_long": {
+          "p50_ms": 1725.009,
+          "mean_ms": 1733.792,
+          "min_ms": 1691.871,
+          "max_ms": 1792.39,
+          "n_questions": 8,
+          "input_tokens": 4096,
+          "samples": 15
+        }
+      }
+    },
+    "cpu_t10": {
+      "arm": "torch-cpu",
+      "dtype": "float32",
+      "threads": 10,
+      "load_s": 22.018,
+      "cases": {
+        "single_short": {
+          "p50_ms": 87.037,
+          "mean_ms": 87.034,
+          "min_ms": 85.636,
+          "max_ms": 88.921,
+          "n_questions": 1,
+          "input_tokens": 74,
+          "samples": 15
+        },
+        "batch8_short": {
+          "p50_ms": 343.984,
+          "mean_ms": 344.167,
+          "min_ms": 341.622,
+          "max_ms": 347.719,
+          "n_questions": 8,
+          "input_tokens": 640,
+          "samples": 15
+        },
+        "single_long": {
+          "p50_ms": 266.221,
+          "mean_ms": 266.794,
+          "min_ms": 262.133,
+          "max_ms": 278.887,
+          "n_questions": 1,
+          "input_tokens": 512,
+          "samples": 15
+        },
+        "batch8_long": {
+          "p50_ms": 1622.417,
+          "mean_ms": 1625.279,
+          "min_ms": 1603.943,
+          "max_ms": 1682.37,
+          "n_questions": 8,
+          "input_tokens": 4096,
+          "samples": 15
+        }
+      }
+    },
+    "mps_fp32": {
+      "arm": "torch-mps",
+      "dtype": "float32",
+      "threads": 4,
+      "load_s": 22.755,
+      "cases": {
+        "single_short": {
+          "p50_ms": 25.159,
+          "mean_ms": 25.127,
+          "min_ms": 24.459,
+          "max_ms": 25.978,
+          "n_questions": 1,
+          "input_tokens": 74,
+          "samples": 15
+        },
+        "batch8_short": {
+          "p50_ms": 116.195,
+          "mean_ms": 115.935,
+          "min_ms": 113.545,
+          "max_ms": 117.473,
+          "n_questions": 8,
+          "input_tokens": 640,
+          "samples": 15
+        },
+        "single_long": {
+          "p50_ms": 79.014,
+          "mean_ms": 79.182,
+          "min_ms": 77.233,
+          "max_ms": 81.621,
+          "n_questions": 1,
+          "input_tokens": 512,
+          "samples": 15
+        },
+        "batch8_long": {
+          "p50_ms": 523.486,
+          "mean_ms": 523.276,
+          "min_ms": 518.957,
+          "max_ms": 528.922,
+          "n_questions": 8,
+          "input_tokens": 4096,
+          "samples": 15
+        }
+      }
+    },
+    "mlx_fp32": {
+      "arm": "mlx",
+      "dtype": "float32",
+      "threads": 4,
+      "load_s": 0.107,
+      "cases": {
+        "single_short": {
+          "p50_ms": 18.316,
+          "mean_ms": 18.358,
+          "min_ms": 17.949,
+          "max_ms": 18.937,
+          "n_questions": 1,
+          "input_tokens": 74,
+          "samples": 15
+        },
+        "batch8_short": {
+          "p50_ms": 94.408,
+          "mean_ms": 94.345,
+          "min_ms": 93.654,
+          "max_ms": 95.008,
+          "n_questions": 8,
+          "input_tokens": 640,
+          "samples": 15
+        },
+        "single_long": {
+          "p50_ms": 65.716,
+          "mean_ms": 65.637,
+          "min_ms": 65.054,
+          "max_ms": 66.116,
+          "n_questions": 1,
+          "input_tokens": 512,
+          "samples": 15
+        },
+        "batch8_long": {
+          "p50_ms": 486.233,
+          "mean_ms": 486.534,
+          "min_ms": 484.668,
+          "max_ms": 488.415,
+          "n_questions": 8,
+          "input_tokens": 4096,
+          "samples": 15
+        }
+      }
+    },
+    "mlx_fp16": {
+      "arm": "mlx",
+      "dtype": "float16",
+      "threads": 4,
+      "load_s": 0.15,
+      "cases": {
+        "single_short": {
+          "p50_ms": 16.818,
+          "mean_ms": 16.946,
+          "min_ms": 16.537,
+          "max_ms": 18.814,
+          "n_questions": 1,
+          "input_tokens": 74,
+          "samples": 15
+        },
+        "batch8_short": {
+          "p50_ms": 95.062,
+          "mean_ms": 98.136,
+          "min_ms": 92.569,
+          "max_ms": 107.915,
+          "n_questions": 8,
+          "input_tokens": 640,
+          "samples": 15
+        },
+        "single_long": {
+          "p50_ms": 67.787,
+          "mean_ms": 67.329,
+          "min_ms": 62.243,
+          "max_ms": 72.03,
+          "n_questions": 1,
+          "input_tokens": 512,
+          "samples": 15
+        },
+        "batch8_long": {
+          "p50_ms": 524.443,
+          "mean_ms": 527.392,
+          "min_ms": 495.828,
+          "max_ms": 601.971,
+          "n_questions": 8,
+          "input_tokens": 4096,
+          "samples": 15
+        }
+      }
+    },
+    "typed_mps_fp32": {
+      "arm": "torch-mps",
+      "dtype": "float32",
+      "threads": 4,
+      "load_s": 23.242,
+      "cases": {
+        "single_short": {
+          "p50_ms": 27.57,
+          "mean_ms": 27.494,
+          "min_ms": 25.346,
+          "max_ms": 29.284,
+          "n_questions": 1,
+          "input_tokens": 74,
+          "samples": 15
+        },
+        "batch8_short": {
+          "p50_ms": 116.759,
+          "mean_ms": 117.129,
+          "min_ms": 115.656,
+          "max_ms": 121.194,
+          "n_questions": 8,
+          "input_tokens": 640,
+          "samples": 15
+        },
+        "single_long": {
+          "p50_ms": 110.883,
+          "mean_ms": 110.861,
+          "min_ms": 109.308,
+          "max_ms": 113.635,
+          "n_questions": 1,
+          "input_tokens": 706,
+          "samples": 15
+        },
+        "batch8_long": {
+          "p50_ms": 809.021,
+          "mean_ms": 808.938,
+          "min_ms": 805.324,
+          "max_ms": 812.215,
+          "n_questions": 8,
+          "input_tokens": 5720,
+          "samples": 15
+        }
+      }
+    },
+    "typed_mlx_fp32": {
+      "arm": "mlx",
+      "dtype": "float32",
+      "threads": 4,
+      "load_s": 0.111,
+      "cases": {
+        "single_short": {
+          "p50_ms": 18.292,
+          "mean_ms": 18.492,
+          "min_ms": 18.047,
+          "max_ms": 19.65,
+          "n_questions": 1,
+          "input_tokens": 74,
+          "samples": 15
+        },
+        "batch8_short": {
+          "p50_ms": 95.087,
+          "mean_ms": 95.101,
+          "min_ms": 94.351,
+          "max_ms": 96.742,
+          "n_questions": 8,
+          "input_tokens": 640,
+          "samples": 15
+        },
+        "single_long": {
+          "p50_ms": 99.573,
+          "mean_ms": 99.421,
+          "min_ms": 97.606,
+          "max_ms": 100.494,
+          "n_questions": 1,
+          "input_tokens": 706,
+          "samples": 15
+        },
+        "batch8_long": {
+          "p50_ms": 751.69,
+          "mean_ms": 751.127,
+          "min_ms": 747.221,
+          "max_ms": 754.379,
+          "n_questions": 8,
+          "input_tokens": 5720,
+          "samples": 15
+        }
+      }
+    },
+    "typed_mlx_fp16": {
+      "arm": "mlx",
+      "dtype": "float16",
+      "threads": 4,
+      "load_s": 0.073,
+      "cases": {
+        "single_short": {
+          "p50_ms": 16.984,
+          "mean_ms": 17.01,
+          "min_ms": 16.696,
+          "max_ms": 17.722,
+          "n_questions": 1,
+          "input_tokens": 74,
+          "samples": 15
+        },
+        "batch8_short": {
+          "p50_ms": 100.191,
+          "mean_ms": 103.17,
+          "min_ms": 98.219,
+          "max_ms": 125.797,
+          "n_questions": 8,
+          "input_tokens": 640,
+          "samples": 15
+        },
+        "single_long": {
+          "p50_ms": 100.239,
+          "mean_ms": 100.418,
+          "min_ms": 98.261,
+          "max_ms": 103.405,
+          "n_questions": 1,
+          "input_tokens": 706,
+          "samples": 15
+        },
+        "batch8_long": {
+          "p50_ms": 785.098,
+          "mean_ms": 787.034,
+          "min_ms": 760.786,
+          "max_ms": 814.167,
+          "n_questions": 8,
+          "input_tokens": 5720,
+          "samples": 15
+        }
+      }
+    },
+    "typed_mps_fp16": {
+      "arm": "torch-mps",
+      "dtype": "float16",
+      "threads": 4,
+      "load_s": 22.319,
+      "cases": {
+        "single_short": {
+          "p50_ms": 35.632,
+          "mean_ms": 35.938,
+          "min_ms": 34.665,
+          "max_ms": 37.743,
+          "n_questions": 1,
+          "input_tokens": 74,
+          "samples": 15
+        },
+        "batch8_short": {
+          "p50_ms": 129.287,
+          "mean_ms": 132.448,
+          "min_ms": 124.59,
+          "max_ms": 149.155,
+          "n_questions": 8,
+          "input_tokens": 640,
+          "samples": 15
+        },
+        "single_long": {
+          "p50_ms": 116.049,
+          "mean_ms": 116.702,
+          "min_ms": 114.84,
+          "max_ms": 120.321,
+          "n_questions": 1,
+          "input_tokens": 706,
+          "samples": 15
+        },
+        "batch8_long": {
+          "p50_ms": 869.511,
+          "mean_ms": 871.249,
+          "min_ms": 835.934,
+          "max_ms": 942.589,
+          "n_questions": 8,
+          "input_tokens": 5720,
+          "samples": 15
+        }
+      }
+    }
+  },
+  "recommendation": "Best on this M3 Max: MLX fp32 for both English and typed-decisions. MPS fp32 is close. fp16 is not a win on long/batched typed inputs (MPS fp16 slower; MLX fp16 noisier/slower on batch8_long). CPU best at 4 threads for short calls, 10 for large batches."
+}

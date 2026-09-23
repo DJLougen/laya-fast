@@ -1,0 +1,58 @@
+{
+  "arm": "ane",
+  "buckets": [
+    96
+  ],
+  "cases": {
+    "single_short": {
+      "n_questions": 1,
+      "input_tokens": 74,
+      "samples": 30,
+      "mean_ms": 9.869,
+      "p50_ms": 9.854,
+      "min_ms": 9.766,
+      "max_ms": 10.067,
+      "wall_ms": [
+        9.863,
+        9.94,
+        9.818,
+        9.841,
+        9.834,
+        9.773,
+        9.872,
+        9.806,
+        9.854,
+        10.058,
+        9.982,
+        9.804,
+        9.912,
+        10.067,
+        9.874,
+        9.857,
+        9.85,
+        9.904,
+        9.964,
+        9.838,
+        9.832,
+        9.855,
+        9.804,
+        9.824,
+        9.837,
+        9.893,
+        9.899,
+        9.865,
+        9.766,
+        9.772
+      ]
+    },
+    "batch8_short": {
+      "skipped": "sequence length 104 exceeds largest ANE bucket 96"
+    },
+    "single_long": {
+      "skipped": "sequence length 512 exceeds largest ANE bucket 96"
+    },
+    "batch8_long": {
+      "skipped": "sequence length 512 exceeds largest ANE bucket 96"
+    }
+  }
+}

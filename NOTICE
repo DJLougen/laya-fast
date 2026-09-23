@@ -1,0 +1,14 @@
+Laya Fast
+Copyright 2026 DJ Lougen
+
+This project is an independent Apple Silicon runtime for the Laya decision
+model. It is not an official Convai Innovations release.
+
+Laya weights and the original training code are Copyright Convai Innovations
+and licensed under the Apache License, Version 2.0. Download them from
+https://huggingface.co/convaiinnovations/laya — they are not included here.
+
+The Neural Engine body is a ModernBERT port of the BC1S / 1x1-conv rewrite
+approach used by mizorewww/laya-mlx. That repository is a separate MLX port.
+This tree adds the ANE + GPU router (LayaFast) and the measurement log in
+summary.md.

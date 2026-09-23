@@ -1,0 +1,17 @@
+{
+  "python": "3.12.13",
+  "platform": "macOS-27.2-arm64-arm-64bit",
+  "packages": {
+    "mlx": "0.32.2",
+    "mlx-metal": "0.32.2",
+    "mlx-lm": "0.31.3",
+    "transformers": "5.5.0",
+    "torch": "2.14.0",
+    "safetensors": "0.8.0",
+    "tokenizers": "0.22.2",
+    "numpy": "2.5.3",
+    "huggingface-hub": "1.32.0"
+  },
+  "USE_TF": null,
+  "TOKENIZERS_PARALLELISM": null
+}

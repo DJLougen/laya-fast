@@ -1,0 +1,23 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Checkpoints and compiled Neural Engine bodies are rebuilt locally.
+# Each ANE bucket is ~700 MB; GitHub cannot take them.
+converted/
+converted-fp16/
+converted-typed/
+converted-typed-fp16/
+source/
+source-typed-decisions/
+backups/
+*.safetensors
+*.mlpackage
+ane/body*/model.mlmodelc/
+ane/body*/model.mlpackage/
+
+# Machine-local quality dumps (paths and a suite that is not in this repo).
+quality_*.json
+quality_*.csv
+run_quality.py

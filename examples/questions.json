@@ -1,0 +1,15 @@
+{
+  "department": {
+    "type": "choice",
+    "instructions": "Who should handle this?",
+    "criteria": {
+      "billing": "invoices, payments, refunds",
+      "technical": "bugs and outages",
+      "sales": "new purchases"
+    }
+  },
+  "refund": {
+    "type": "noul",
+    "instructions": "Does the customer ask for money back?"
+  }
+}

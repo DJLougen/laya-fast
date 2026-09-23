@@ -1,0 +1,26 @@
+{
+  "cases": {
+    "single_short": {
+      "answer_diffs": [],
+      "usage_equal": true,
+      "pass": true
+    },
+    "batch8_short": {
+      "answer_diffs": [],
+      "usage_equal": true,
+      "pass": true
+    },
+    "single_long": {
+      "answer_diffs": [],
+      "usage_equal": true,
+      "pass": true
+    },
+    "batch8_long": {
+      "answer_diffs": [],
+      "usage_equal": true,
+      "pass": true
+    }
+  },
+  "failures": [],
+  "pass": true
+}

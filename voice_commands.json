@@ -1,0 +1,71 @@
+{
+  "_help": "Voice command catalog for laya_server.py. Laya picks ONE action by its description (edit freely). 'strip' is a regex removed from the start of the transcript to get the action's argument {arg}. Below min_probability nothing runs (a 'didn't catch that' notification instead). Keep descriptions short: longer prompts (>128 tokens total) fall off the Neural Engine and roughly double latency. Action kinds: open_app, open_url, shell (argv list, {arg} substituted per-element, never through a shell), applescript (script gets {arg} as argv item 1), none.",
+  "min_probability": 0.35,
+  "actions": {
+    "open_app": {
+      "description": "open or switch to an app",
+      "strip": [
+        "^(open|launch|start|switch to|go to|bring up|pull up|show)( up)?( the| my)?( app| application)?\\s+",
+        "\\s+(app|application)$"
+      ],
+      "kind": "open_app"
+    },
+    "web_search": {
+      "description": "search the web or look up a question",
+      "strip": [
+        "^(search( the web| google| online)?( for)?|google|look up|find( me)?( info on)?)\\s+"
+      ],
+      "kind": "open_url",
+      "url": "https://www.google.com/search?q={arg}"
+    },
+    "new_reminder": {
+      "description": "add a reminder or to-do item",
+      "strip": [
+        "^((add|create|make|set|put)( a| me a)? (new )?reminders?( to| for)?|(new )?reminders?( to)?|remind me( to)?|(add|put))\\s+",
+        "\\s+(to|on|onto) (my )?(to-?do|todo|reminders?)( list)?$"
+      ],
+      "kind": "applescript",
+      "script": "on run argv\n tell application \"Reminders\" to make new reminder with properties {name:item 1 of argv}\n return \"Reminder: \" & item 1 of argv\nend run"
+    },
+    "new_note": {
+      "description": "write down a note to keep",
+      "strip": [
+        "^((take|make|write|create)( a| down a)? (new )?note( that| saying| about)?|(new )?note( that)?|jot down|write down)\\s+"
+      ],
+      "kind": "applescript",
+      "script": "on run argv\n tell application \"Notes\" to make new note with properties {body:item 1 of argv}\n return \"Note saved\"\nend run"
+    },
+    "play_pause": {
+      "description": "play, pause or resume music",
+      "kind": "applescript",
+      "script": "on run argv\n tell application \"Music\" to playpause\n return \"Play/pause\"\nend run"
+    },
+    "volume_up": {
+      "description": "turn volume up",
+      "kind": "applescript",
+      "script": "on run argv\n set v to output volume of (get volume settings)\n set volume output volume (v + 15)\n return \"Volume up\"\nend run"
+    },
+    "volume_down": {
+      "description": "turn volume down or mute",
+      "kind": "applescript",
+      "script": "on run argv\n set v to output volume of (get volume settings)\n set volume output volume (v - 15)\n return \"Volume down\"\nend run"
+    },
+    "lock_screen": {
+      "description": "lock the screen",
+      "kind": "shell",
+      "argv": [
+        "/usr/bin/pmset",
+        "displaysleepnow"
+      ]
+    },
+    "screenshot": {
+      "description": "screenshot or screen capture",
+      "kind": "shell",
+      "argv": [
+        "/usr/sbin/screencapture",
+        "-x",
+        "~/Desktop/Voice screenshot {time}.png"
+      ]
+    }
+  }
+}
