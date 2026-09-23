@@ -1,11 +1,11 @@
+# Base install: MLX runtime, `hf download` CLI, and convert.py.
+#   .venv/bin/pip install -r requirements.txt
+# For Core ML / Neural Engine bodies (export or --agent fast), also install
+# requirements-export.txt.
+
 # Apple Silicon runtime
 mlx==0.32.2
 numpy
 safetensors
 huggingface_hub
 tokenizers
-transformers
-
-# Only needed to convert weights or export Neural Engine bodies
-torch
-coremltools

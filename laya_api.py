@@ -223,10 +223,11 @@ class LayaMLX:
         from laya_mlx import load_model, _resolve_model_dir
         # Bound MLX's freed-buffer cache. MLX's default cache ceiling on this
         # 36 GB Mac is 36.7 GB (measured), so variable-length traffic keeps
-        # every size of buffer it ever used. Measured (/tmp/cache_sweep.py,
-        # interleaved): a 128 MB cap matches 1 GB latency on all 4 fixtures
-        # (single_short 13.88 vs 13.89 ms) and cuts process footprint from
-        # 2054 MB to 1154 MB; 0 MB costs ~4% on single_short.
+        # every size of buffer it ever used. Measured (interleaved cache-limit
+        # sweep over this repo's benchmark fixtures): a 128 MB cap matches 1 GB
+        # latency on all 4 fixtures (single_short 13.88 vs 13.89 ms) and cuts
+        # process footprint from 2054 MB to 1154 MB; 0 MB costs ~4% on
+        # single_short.
         # LAYA_CACHE_LIMIT_MB=-1 leaves MLX's default untouched.
         _cache_mb = int(os.environ.get("LAYA_CACHE_LIMIT_MB", "128"))
         if _cache_mb >= 0:
@@ -459,9 +460,13 @@ def _main(argv=None):
     ap.add_argument("--model", default=os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                     "converted-fp16"),
                     help="converted model directory (default: converted-fp16 next to this file)")
-    ap.add_argument("--agent", default=os.environ.get("LAYA_AGENT", "fast"),
+    ap.add_argument("--agent", default=os.environ.get("LAYA_AGENT", "mlx"),
                     choices=["fast", "mlx"],
-                    help="fast (default): LayaFast Neural Engine + MLX router; mlx: GPU only")
+                    help="mlx: GPU-only MLX path, works on a fresh checkout "
+                         "with no compiled ANE bodies. fast: LayaFast ANE+MLX "
+                         "router for optional acceleration; falls back to MLX "
+                         "for lengths without compiled bodies. Override with "
+                         "LAYA_AGENT (default: %(default)s).")
     ap.add_argument("--dtype", default="float16", choices=["float32", "float16"],
                     help="MLX compute dtype (default: float16; fast requires float16)")
     ap.add_argument("--no-compile", action="store_true",

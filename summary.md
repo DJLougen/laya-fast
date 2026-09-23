@@ -1,7 +1,6 @@
 # Laya MLX & Core ML Optimization Project Summary
 
-> **Context for incoming agents & developers:**
-> This document provides a complete technical handover of the optimization and conversion work performed on `convaiinnovations/laya` (a 28-layer bidirectional ModernBERT-large backbone + RL decision head). It documents every experiment, what succeeded, what failed (with exact failure reasons and root causes), benchmark tables, and how to run and extend the codebase.
+> **Scope:** Technical notes on the optimization and conversion work done on `convaiinnovations/laya` (a 28-layer bidirectional ModernBERT-large backbone + RL decision head). It records what was tried, what succeeded, what failed (with failure reasons and root causes), benchmark tables, and how to run and extend the code. All measurements were taken on the hardware described in §1.
 
 ---
 
@@ -11,7 +10,7 @@
 - **Chip:** Apple M3 Max (14 cores: 10 Performance, 4 Efficiency)
 - **Unified Memory:** 36 GB
 - **Operating System:** macOS (Darwin arm64)
-- **Python Runtime:** Python 3.12.13 in `/Users/djl/Projects/ai-ml/laya-mlx/.venv`
+- **Python Runtime:** Python 3.12.13 in the project virtualenv (`.venv`)
 - **Frameworks:**
   - `mlx`: 0.32.2 (Metal 3 GPU runtime)
   - `torch`: 2.14.0
@@ -60,13 +59,13 @@ All benchmarks measured on **Apple M3 Max (36 GB Unified Memory)** across identi
 
 > **Key takeaway:** The optimized MLX FP32 runtime with custom Metal kernels runs **6.0× faster** than PyTorch CPU (10 threads), **1.4× faster** than PyTorch MPS, **1.3× faster** than Core ML, and loads **160× faster** (0.14s vs 23s) while maintaining **exact FP32 decision parity**.
 
-## 3b. Session 3 (2026-09-22): speed work after fp16 — verified results
+## 3b. Optimization round (2026-09-22): speed work after fp16 — verified results
 
 All numbers below are from interleaved A/B runs inside one process (cross-process drift on this Mac is up to ~7%), fp16 weights (`converted-fp16`), `compile=True`, M3 Max 30-core GPU. The gate is `bash autoresearch.sh`, fail-closed against `autoresearch_golden.json`.
 
-**New MLX defaults vs session start** (`/tmp/final_ab.py`, 3 rounds, medians):
+**New MLX defaults vs baseline** (interleaved A/B harness, 3 rounds, medians):
 
-| Fixture | Session start | New defaults | Speedup |
+| Fixture | Baseline | New defaults | Speedup |
 | :--- | ---: | ---: | ---: |
 | single_short (74 tok) | 15.19 ms | 13.97 ms | 1.087× |
 | batch8_short (8 q, 68–104 tok) | 76.08 ms | 64.88 ms | 1.173× |
@@ -88,7 +87,7 @@ All numbers below are from interleaved A/B runs inside one process (cross-proces
 | **MLX cache cap** | `LayaMLX` caps MLX's freed-buffer cache at 128 MB. The measured default ceiling on this Mac is 36.7 GB. | Same latency as 1 GB on all fixtures; footprint 2054→1154 MB. | `LAYA_CACHE_LIMIT_MB=-1` |
 | **Dedup (`dedup.py`)** | `dedup_system_one` runs one forward per unique question. This is a product feature, not a kernel speedup. | 24 q (8 unique ×3): 219→66 ms, answers identical. | opt-in |
 
-**Neural Engine (ANE) English export (`ane/`).** This ports mizorewww's BC1S/1×1-conv rewrite to ModernBERT-large. All 10,594 non-constant ops are placed on the Neural Engine at every bucket. Head-to-head vs the new MLX defaults (`/tmp/verify_ane.py`, one process, 3 rounds):
+**Neural Engine (ANE) English export (`ane/`).** This ports mizorewww's BC1S/1×1-conv rewrite to ModernBERT-large. All 10,594 non-constant ops are placed on the Neural Engine at every bucket. Head-to-head vs the new MLX defaults (one process, 3 rounds):
 
 | Fixture | MLX | ANE | Winner |
 | :--- | ---: | ---: | :--- |
@@ -101,7 +100,7 @@ The ANE gate passes (`max|dprob|=7.3e-3`). The old 103 ms "ANE" number in the ta
 
 **Router `LayaFast` (`laya_fast.py`) — fastest configuration.** The Neural Engine and the GPU run *together*. Single questions up to 128 tokens run on the Neural Engine; for multi-question batches, a worker thread runs some questions on the Neural Engine while the GPU batches the rest at the same time, and the split is chosen by a measured cost model (`ane/cost_model.json`). Compiled `.mlmodelc` files are cached, so load takes 2.3 s instead of ~3.5 min of recompiling.
 
-**Both engines at once, including long batches (segment 3).** At 512 tokens the two engines are equally fast per question (MLX 53.98 vs ANE 53.38 ms), so a long batch should be split across them rather than queued entirely on the GPU. The router used to send only ≤128-token questions to the Neural Engine, leaving it idle through every long batch. After re-exporting the 256/512-token buckets and letting the splitter assign long questions to the ANE, measured on the 8×512 fixture:
+**Both engines at once, including long batches.** At 512 tokens the two engines are equally fast per question (MLX 53.98 vs ANE 53.38 ms), so a long batch should be split across them rather than queued entirely on the GPU. The router used to send only ≤128-token questions to the Neural Engine, leaving it idle through every long batch. After re-exporting the 256/512-token buckets and letting the splitter assign long questions to the ANE, measured on the 8×512 fixture:
 
 | ANE share k | 0 (GPU only) | 2 | 3 | **4** | 5 | 6 |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -113,7 +112,7 @@ Final state, both gates PASS (`bash autoresearch.sh` and `bench_autoresearch.py 
 
 | | single_short | batch8_short | single_long | batch8_long | Process memory |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| Session start (MLX fp16) | 15.34 ms | 76.26 | 53.58 | 378.59 | — |
+| Baseline (MLX fp16) | 15.34 ms | 76.26 | 53.58 | 378.59 | — |
 | `LayaMLX` new defaults | 13.86 ms | 64.94 | 53.67 | 373.65 | 1151 MB |
 | `LayaFast`, short only | 9.64 ms | 41.84 | 53.82 | 374.49 | 1485 MB |
 | **`LayaFast`, both engines on long batches** | **9.71 ms** | **41.43** | **53.63** | **218.51** | 1485 MB |
@@ -124,9 +123,9 @@ Long inputs now improve too: the two engines are tied per long question, so spli
 
 The MLX buffer cache is capped at 128 MB; that matched 1 GB latency on all fixtures and cut footprint 2054→1154 MB. The ANECompilerService system daemon holds ~505 MB left over from compiling the models; macOS manages it and it is not part of the runtime cost.
 
-**Measured dead ends this session:** split-K via batched matmul, pre-transposed `x@Wt`, `(W@x.T).T`, `mx.block_masked_mm` (all within noise); the old `LAYA_SKINNY_GEMM` kernel (still slower, 14.4 vs 13.8 ms encoder); tall GEMM on Wqkv/Wo/Wo_mlp (wins in isolated 28-GEMM chains, loses in-context); `mx.compile(shapeless=True)` (fails: Slice/CustomKernel can't infer shapes); ggmlc Metal (31.5 ms single, 193 ms batch8 — 2–3× slower than MLX, and the release binary needed two patches to run).
+**Measured dead ends in this round:** split-K via batched matmul, pre-transposed `x@Wt`, `(W@x.T).T`, `mx.block_masked_mm` (all within noise); the old `LAYA_SKINNY_GEMM` kernel (still slower, 14.4 vs 13.8 ms encoder); tall GEMM on Wqkv/Wo/Wo_mlp (wins in isolated 28-GEMM chains, loses in-context); `mx.compile(shapeless=True)` (fails: Slice/CustomKernel can't infer shapes); ggmlc Metal (31.5 ms single, 193 ms batch8 — 2–3× slower than MLX, and the release binary needed two patches to run).
 
-**Segment-3 dead ends (all measured, with numbers):**
+**Further dead ends (all measured, with numbers):**
 - **ANE op count is nearly free.** Appending 3,000 real concat/split ops to the graph cost 9.596 → 9.803 ms — **0.069 µs per op**, so the whole 10,594-op graph costs ~0.7 ms. Hoisting the per-head RoPE out of the 16-head loop (~6,000 fewer ops) could win at most ~0.5 ms, so the rewrite was dropped.
 - **Manual attention is not faster** than `mx.fast.scaled_dot_product_attention`: 0.454 vs 0.429 ms at L=512, across fp16/fp32 softmax and two layouts. The boolean mask is not the problem (0.398 with mask vs 0.370 without: 7%).
 - **Batched ANE bodies (B=4) are a wash.** They are bit-exact vs the single-row model (max|dlogit| = 0.0000 at L=80 and L=128) and 1.23× per question in isolation (9.42 → 7.68 ms), but interleaved A/B gave −0.30% on batch8_short, +0.25% on batch8_long and −0.39% on the untouched single-question path — i.e. inside the ±0.4% noise floor. Once the MLX cost model accounts for unpadding, the GPU side is the binding constraint. Rebuild with `ane/export_batched.py --length {80,128} --batch 4`.
@@ -139,7 +138,7 @@ The MLX buffer cache is capped at 128 MB; that matched 1 GB latency on all fixtu
 
 ## 4. Architecture of the Custom Metal Kernels
 
-Located in [`laya_mlx.py`](file:///Users/djl/Projects/ai-ml/laya-mlx/laya_mlx.py):
+Located in `laya_mlx.py`:
 
 ### Kernel 1: `fused_qkv_rope`
 - **Goal:** ModernBERT's attention projects `x -> Wqkv(x)` producing a packed tensor `[B, L, 3, H, D]`. Standard pipelines slice Q, K, V, run rotary embedding calculations on Q and K, and transpose all three to `[B, H, L, D]`.
@@ -160,20 +159,26 @@ Located in [`laya_mlx.py`](file:///Users/djl/Projects/ai-ml/laya-mlx/laya_mlx.py
 
 ## 5. File & Directory Reference
 
+Tracked source and evidence:
+
 ```
-/Users/djl/Projects/ai-ml/laya-mlx/
+laya-mlx/
 ├── laya_mlx.py                 # Core MLX neural network architecture with custom Metal kernels
 ├── laya_api.py                 # High-level Jev-compatible RLAgent API (prepare, raw_forward, system_one)
-├── benchmark.py                # Comprehensive parity & runtime benchmark suite (CPU, MPS, MLX)
+├── laya_fast.py                # MLX+ANE router (fastest configuration)
+├── tall_gemm.py                # Custom simdgroup-MMA kernel for the encoder Wi projection
+├── dedup.py                    # One forward per unique question
+├── benchmark.py                # Parity & runtime benchmark suite (CPU, MPS, MLX)
 ├── convert.py                  # Weight converter from PyTorch safetensors to MLX safetensors
 ├── convert_coreml.py           # Standalone Core ML export & benchmark tool (with dialect/clamp patches)
-├── converted/                  # Exported MLX FP32 weights (1.68 GB safetensors + configs)
-├── converted-fp16/             # Exported MLX FP16 weights
-├── source/                     # Original PyTorch reference checkpoint & code
-├── laya_decision.mlpackage/    # Core ML compiled package for Apple Silicon
-├── runtime_mlx_fp32_compiled.json  # Benchmark output of compiled MLX FP32 run
+├── ane/                        # Neural Engine export, cost model, and verification scripts
+├── examples/                   # Sample request/question fixtures
+├── runtime_*.json              # Recorded benchmark outputs per runtime/dtype
+├── autoresearch.sh + autoresearch_golden.json  # Fail-closed parity/speed gate
 └── download_integrity.json     # Pinned revision SHA256 hashes of original checkpoint
 ```
+
+Model artifacts (`converted/`, `converted-fp16/`, `source/`, `*.mlpackage`, compiled `.mlmodelc` bodies) are generated locally by the conversion/export scripts and are not tracked in the repository.
 
 ---
 
@@ -181,8 +186,6 @@ Located in [`laya_mlx.py`](file:///Users/djl/Projects/ai-ml/laya-mlx/laya_mlx.py
 
 ### 1. Python API
 ```python
-import sys
-sys.path.insert(0, "/Users/djl/Projects/ai-ml/laya-mlx")
 from laya_api import LayaMLX
 
 # Automatically loads from local HF cache (~/.cache/huggingface/hub/models--convaiinnovations--laya)
@@ -201,8 +204,10 @@ print(result)
 ```
 
 ### 2. CLI Benchmark
+
+Run from the repository root:
+
 ```bash
-cd /Users/djl/Projects/ai-ml/laya-mlx
 # Run MLX FP32 benchmark with custom Metal kernels and JIT compilation:
 .venv/bin/python benchmark.py runtime --arm mlx --model converted --dtype float32 --compile
 

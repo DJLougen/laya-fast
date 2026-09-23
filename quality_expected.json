@@ -1,0 +1,2152 @@
+{
+  "route_01": {
+    "family": "route",
+    "split": "tune",
+    "questions": {
+      "action": {
+        "type": "choice",
+        "label": "delete"
+      },
+      "confirm": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "route_02": {
+    "family": "route",
+    "split": "tune",
+    "questions": {
+      "action": {
+        "type": "choice",
+        "label": "summarize"
+      },
+      "confirm": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "route_03": {
+    "family": "route",
+    "split": "tune",
+    "questions": {
+      "action": {
+        "type": "choice",
+        "label": "write"
+      },
+      "confirm": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "route_04": {
+    "family": "route",
+    "split": "test",
+    "questions": {
+      "action": {
+        "type": "choice",
+        "label": "read"
+      },
+      "confirm": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "route_05": {
+    "family": "route",
+    "split": "test",
+    "questions": {
+      "action": {
+        "type": "choice",
+        "label": "delete"
+      },
+      "confirm": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "route_06": {
+    "family": "route",
+    "split": "test",
+    "questions": {
+      "action": {
+        "type": "choice",
+        "label": "write"
+      },
+      "confirm": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "route_07": {
+    "family": "route",
+    "split": "test",
+    "questions": {
+      "action": {
+        "type": "choice",
+        "label": "write"
+      },
+      "confirm": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "route_08": {
+    "family": "route",
+    "split": "test",
+    "questions": {
+      "action": {
+        "type": "choice",
+        "label": "write"
+      },
+      "confirm": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "route_09": {
+    "family": "route",
+    "split": "test",
+    "questions": {
+      "action": {
+        "type": "choice",
+        "label": "write"
+      },
+      "confirm": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "route_10": {
+    "family": "route",
+    "split": "test",
+    "questions": {
+      "action": {
+        "type": "choice",
+        "label": "read"
+      },
+      "confirm": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "route_11": {
+    "family": "route",
+    "split": "test",
+    "questions": {
+      "action": {
+        "type": "choice",
+        "label": "write"
+      },
+      "confirm": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "route_12": {
+    "family": "route",
+    "split": "test",
+    "questions": {
+      "action": {
+        "type": "choice",
+        "label": "delete"
+      },
+      "confirm": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "route_13": {
+    "family": "route",
+    "split": "test",
+    "questions": {
+      "action": {
+        "type": "choice",
+        "label": "read"
+      },
+      "confirm": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "route_14": {
+    "family": "route",
+    "split": "test",
+    "questions": {
+      "action": {
+        "type": "choice",
+        "label": "summarize"
+      },
+      "confirm": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "route_15": {
+    "family": "route",
+    "split": "test",
+    "questions": {
+      "action": {
+        "type": "choice",
+        "label": "write"
+      },
+      "confirm": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "cond_01": {
+    "family": "conditions",
+    "split": "tune",
+    "questions": {
+      "cond_billing_dispute": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_contains_amount": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_mentions_deadline": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_escalated": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_angry_tone": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "cond_02": {
+    "family": "conditions",
+    "split": "tune",
+    "questions": {
+      "cond_billing_dispute": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_contains_amount": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_mentions_deadline": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_escalated": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_angry_tone": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "cond_03": {
+    "family": "conditions",
+    "split": "tune",
+    "questions": {
+      "cond_billing_dispute": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_contains_amount": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_mentions_deadline": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_escalated": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_angry_tone": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "cond_04": {
+    "family": "conditions",
+    "split": "test",
+    "questions": {
+      "cond_billing_dispute": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_contains_amount": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_mentions_deadline": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_escalated": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_angry_tone": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "cond_05": {
+    "family": "conditions",
+    "split": "test",
+    "questions": {
+      "cond_billing_dispute": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_contains_amount": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_mentions_deadline": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_escalated": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_angry_tone": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "cond_06": {
+    "family": "conditions",
+    "split": "test",
+    "questions": {
+      "cond_billing_dispute": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_contains_amount": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_mentions_deadline": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_escalated": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_angry_tone": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "cond_07": {
+    "family": "conditions",
+    "split": "test",
+    "questions": {
+      "cond_billing_dispute": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_contains_amount": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_mentions_deadline": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_escalated": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_angry_tone": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "cond_08": {
+    "family": "conditions",
+    "split": "test",
+    "questions": {
+      "cond_billing_dispute": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_contains_amount": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_mentions_deadline": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_escalated": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_angry_tone": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "cond_09": {
+    "family": "conditions",
+    "split": "test",
+    "questions": {
+      "cond_billing_dispute": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_contains_amount": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_mentions_deadline": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_escalated": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_angry_tone": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "cond_10": {
+    "family": "conditions",
+    "split": "test",
+    "questions": {
+      "cond_billing_dispute": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_contains_amount": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_mentions_deadline": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_escalated": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_angry_tone": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "cond_11": {
+    "family": "conditions",
+    "split": "test",
+    "questions": {
+      "cond_billing_dispute": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_contains_amount": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_mentions_deadline": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_escalated": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_angry_tone": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "cond_12": {
+    "family": "conditions",
+    "split": "test",
+    "questions": {
+      "cond_billing_dispute": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_contains_amount": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_mentions_deadline": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_escalated": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_angry_tone": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "cond_13": {
+    "family": "conditions",
+    "split": "test",
+    "questions": {
+      "cond_billing_dispute": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_contains_amount": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_mentions_deadline": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_escalated": {
+        "type": "noul",
+        "label": 0
+      },
+      "cond_angry_tone": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "cond_14": {
+    "family": "conditions",
+    "split": "test",
+    "questions": {
+      "cond_billing_dispute": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_contains_amount": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_mentions_deadline": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_escalated": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_angry_tone": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "cond_15": {
+    "family": "conditions",
+    "split": "test",
+    "questions": {
+      "cond_billing_dispute": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_contains_amount": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_mentions_deadline": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_escalated": {
+        "type": "noul",
+        "label": 1
+      },
+      "cond_angry_tone": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "asp_01": {
+    "family": "aspects",
+    "split": "tune",
+    "questions": {
+      "aspect_camera": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_performance": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_battery": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_display": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_price": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "asp_02": {
+    "family": "aspects",
+    "split": "tune",
+    "questions": {
+      "aspect_camera": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_performance": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_battery": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_display": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_price": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "asp_03": {
+    "family": "aspects",
+    "split": "tune",
+    "questions": {
+      "aspect_camera": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_performance": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_battery": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_display": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_price": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "asp_04": {
+    "family": "aspects",
+    "split": "test",
+    "questions": {
+      "aspect_camera": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_performance": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_battery": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_display": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_price": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "asp_05": {
+    "family": "aspects",
+    "split": "test",
+    "questions": {
+      "aspect_camera": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_performance": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_battery": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_display": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_price": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "asp_06": {
+    "family": "aspects",
+    "split": "test",
+    "questions": {
+      "aspect_camera": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_performance": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_battery": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_display": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_price": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "asp_07": {
+    "family": "aspects",
+    "split": "test",
+    "questions": {
+      "aspect_camera": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_performance": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_battery": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_display": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_price": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "asp_08": {
+    "family": "aspects",
+    "split": "test",
+    "questions": {
+      "aspect_camera": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_performance": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_battery": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_display": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_price": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "asp_09": {
+    "family": "aspects",
+    "split": "test",
+    "questions": {
+      "aspect_camera": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_performance": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_battery": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_display": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_price": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "asp_10": {
+    "family": "aspects",
+    "split": "test",
+    "questions": {
+      "aspect_camera": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_performance": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_battery": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_display": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_price": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "asp_11": {
+    "family": "aspects",
+    "split": "test",
+    "questions": {
+      "aspect_camera": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_performance": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_battery": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_display": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_price": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "asp_12": {
+    "family": "aspects",
+    "split": "test",
+    "questions": {
+      "aspect_camera": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_performance": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_battery": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_display": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_price": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "asp_13": {
+    "family": "aspects",
+    "split": "test",
+    "questions": {
+      "aspect_camera": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_performance": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_battery": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_display": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_price": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "asp_14": {
+    "family": "aspects",
+    "split": "test",
+    "questions": {
+      "aspect_camera": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_performance": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_battery": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_display": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_price": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "asp_15": {
+    "family": "aspects",
+    "split": "test",
+    "questions": {
+      "aspect_camera": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_performance": {
+        "type": "noul",
+        "label": 0
+      },
+      "aspect_battery": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_display": {
+        "type": "noul",
+        "label": 1
+      },
+      "aspect_price": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "ent_01": {
+    "family": "entities",
+    "split": "tune",
+    "questions": {
+      "has_company__Amazon": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_company__Bedrock": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_person__Andy Jassy": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__CEO": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_product__Amazon": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_product__Bedrock": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__Las Vegas": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__the summit": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ent_02": {
+    "family": "entities",
+    "split": "tune",
+    "questions": {
+      "has_company__Google": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_company__Pixel": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_person__Pichai": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_person__Sundar Pichai": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_product__Gemini Nano": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_product__Pixel devices": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_location__I/O keynote": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_location__Mountain View": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "ent_03": {
+    "family": "entities",
+    "split": "tune",
+    "questions": {
+      "has_company__Maersk": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_company__TerminalLink": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_person__Marta Vidal": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__who": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_product__TerminalLink": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_product__logistics": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_location__Copenhagen": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__office": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ent_04": {
+    "family": "entities",
+    "split": "test",
+    "questions": {
+      "has_company__Adyen": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_company__Stripe": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_company__billing stack": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_person__Lena Hoff": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__engineer": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_product__blog": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_location__Stockholm": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__hub": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ent_05": {
+    "family": "entities",
+    "split": "test",
+    "questions": {
+      "has_company__OpenAI": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_company__SearchGPT": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_person__Altman": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_person__Sam Altman": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_product__SearchGPT": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_product__fireside": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_location__Dublin": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__Paris": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__regulators": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ent_06": {
+    "family": "entities",
+    "split": "test",
+    "questions": {
+      "has_company__Afeela": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_company__Sony": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__Hiroshi Tanaka": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__Tanaka": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_product__Afeela": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_product__concept car": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_location__Osaka": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__Tokyo": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__dealers": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ent_07": {
+    "family": "entities",
+    "split": "test",
+    "questions": {
+      "has_company__Apple": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_company__FlexCam": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_person__Greg Joswiak": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__Joswiak": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_product__FlexCam": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_product__event": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_product__iPhone Air": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__Cupertino": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__accessory": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ent_08": {
+    "family": "entities",
+    "split": "test",
+    "questions": {
+      "has_company__EX90": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_company__Volvo Cars": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__Greta Lindqvist": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__treasurer": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_product__EX90": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_product__roadmap": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_location__Gothenburg": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__analysts": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ent_09": {
+    "family": "entities",
+    "split": "test",
+    "questions": {
+      "has_company__Coinbase": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_company__SEC": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_person__Alesia Haas": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__Haas": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_product__InstantSettle": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_product__questions": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_location__Toronto": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__merchants": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ent_10": {
+    "family": "entities",
+    "split": "test",
+    "questions": {
+      "has_company__F-150": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_company__Ford": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__Farley": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_person__Jim Farley": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_product__F-150 Lightning": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_product__refresh": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_location__Detroit": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__Michigan": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__auto show": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ent_11": {
+    "family": "entities",
+    "split": "test",
+    "questions": {
+      "has_company__FigJam AI": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_company__Figma": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__Priya Raghavan": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__Raghavan": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_product__FigJam AI": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_product__conference": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_location__London": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__design community": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ent_12": {
+    "family": "entities",
+    "split": "test",
+    "questions": {
+      "has_company__GR": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_company__Toyota": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__Akio Toyoda": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__Toyoda": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_product__GR Yaris": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_product__summit": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_location__Frankfurt": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__Nurburgring": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__dealer summit": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ent_13": {
+    "family": "entities",
+    "split": "test",
+    "questions": {
+      "has_company__Chime": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_company__ChimeCard Plus": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_person__Michael Rangeloff": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__Rangeloff": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_product__ChimeCard Plus": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_product__neobank": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_location__Austin": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__students": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ent_14": {
+    "family": "entities",
+    "split": "test",
+    "questions": {
+      "has_company__Kuda": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_company__Kuda Overdraft": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_person__Zara Okafor": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__founder": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_product__Kuda Overdraft": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_product__investors": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_location__Lagos": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__Nigerian": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ent_15": {
+    "family": "entities",
+    "split": "test",
+    "questions": {
+      "has_company__R2": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_company__Rivian": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__RJ Scaringe": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_person__Scaringe": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_product__R2": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_product__clip": {
+        "type": "noul",
+        "label": 0
+      },
+      "has_location__Laguna Beach": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__New York": {
+        "type": "noul",
+        "label": 1
+      },
+      "has_location__design studio": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "sev_01": {
+    "family": "severity",
+    "split": "tune",
+    "questions": {
+      "severity": {
+        "type": "score",
+        "label": 0
+      }
+    }
+  },
+  "sev_02": {
+    "family": "severity",
+    "split": "tune",
+    "questions": {
+      "severity": {
+        "type": "score",
+        "label": 0
+      }
+    }
+  },
+  "sev_03": {
+    "family": "severity",
+    "split": "tune",
+    "questions": {
+      "severity": {
+        "type": "score",
+        "label": 0
+      }
+    }
+  },
+  "sev_04": {
+    "family": "severity",
+    "split": "test",
+    "questions": {
+      "severity": {
+        "type": "score",
+        "label": 1
+      }
+    }
+  },
+  "sev_05": {
+    "family": "severity",
+    "split": "test",
+    "questions": {
+      "severity": {
+        "type": "score",
+        "label": 1
+      }
+    }
+  },
+  "sev_06": {
+    "family": "severity",
+    "split": "test",
+    "questions": {
+      "severity": {
+        "type": "score",
+        "label": 1
+      }
+    }
+  },
+  "sev_07": {
+    "family": "severity",
+    "split": "test",
+    "questions": {
+      "severity": {
+        "type": "score",
+        "label": 2
+      }
+    }
+  },
+  "sev_08": {
+    "family": "severity",
+    "split": "test",
+    "questions": {
+      "severity": {
+        "type": "score",
+        "label": 2
+      }
+    }
+  },
+  "sev_09": {
+    "family": "severity",
+    "split": "test",
+    "questions": {
+      "severity": {
+        "type": "score",
+        "label": 2
+      }
+    }
+  },
+  "sev_10": {
+    "family": "severity",
+    "split": "test",
+    "questions": {
+      "severity": {
+        "type": "score",
+        "label": 3
+      }
+    }
+  },
+  "sev_11": {
+    "family": "severity",
+    "split": "test",
+    "questions": {
+      "severity": {
+        "type": "score",
+        "label": 3
+      }
+    }
+  },
+  "sev_12": {
+    "family": "severity",
+    "split": "test",
+    "questions": {
+      "severity": {
+        "type": "score",
+        "label": 3
+      }
+    }
+  },
+  "sev_13": {
+    "family": "severity",
+    "split": "test",
+    "questions": {
+      "severity": {
+        "type": "score",
+        "label": 4
+      }
+    }
+  },
+  "sev_14": {
+    "family": "severity",
+    "split": "test",
+    "questions": {
+      "severity": {
+        "type": "score",
+        "label": 4
+      }
+    }
+  },
+  "sev_15": {
+    "family": "severity",
+    "split": "test",
+    "questions": {
+      "severity": {
+        "type": "score",
+        "label": 4
+      }
+    }
+  },
+  "ver_01": {
+    "family": "verify",
+    "split": "tune",
+    "questions": {
+      "supported": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ver_02": {
+    "family": "verify",
+    "split": "tune",
+    "questions": {
+      "supported": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "ver_03": {
+    "family": "verify",
+    "split": "tune",
+    "questions": {
+      "supported": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ver_04": {
+    "family": "verify",
+    "split": "test",
+    "questions": {
+      "supported": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "ver_05": {
+    "family": "verify",
+    "split": "test",
+    "questions": {
+      "supported": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ver_06": {
+    "family": "verify",
+    "split": "test",
+    "questions": {
+      "supported": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "ver_07": {
+    "family": "verify",
+    "split": "test",
+    "questions": {
+      "supported": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ver_08": {
+    "family": "verify",
+    "split": "test",
+    "questions": {
+      "supported": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "ver_09": {
+    "family": "verify",
+    "split": "test",
+    "questions": {
+      "supported": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ver_10": {
+    "family": "verify",
+    "split": "test",
+    "questions": {
+      "supported": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ver_11": {
+    "family": "verify",
+    "split": "test",
+    "questions": {
+      "supported": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ver_12": {
+    "family": "verify",
+    "split": "test",
+    "questions": {
+      "supported": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "ver_13": {
+    "family": "verify",
+    "split": "test",
+    "questions": {
+      "supported": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "ver_14": {
+    "family": "verify",
+    "split": "test",
+    "questions": {
+      "supported": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "ver_15": {
+    "family": "verify",
+    "split": "test",
+    "questions": {
+      "supported": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "rec_01": {
+    "family": "records",
+    "split": "tune",
+    "questions": {
+      "pair_1": {
+        "type": "noul",
+        "label": 1
+      },
+      "pair_2": {
+        "type": "noul",
+        "label": 1
+      },
+      "neg_1": {
+        "type": "noul",
+        "label": 0
+      },
+      "neg_2": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "rec_02": {
+    "family": "records",
+    "split": "tune",
+    "questions": {
+      "pair_1": {
+        "type": "noul",
+        "label": 1
+      },
+      "pair_2": {
+        "type": "noul",
+        "label": 1
+      },
+      "neg_1": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "rec_03": {
+    "family": "records",
+    "split": "tune",
+    "questions": {
+      "pair_1": {
+        "type": "noul",
+        "label": 1
+      },
+      "pair_2": {
+        "type": "noul",
+        "label": 1
+      },
+      "neg_1": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "rec_04": {
+    "family": "records",
+    "split": "test",
+    "questions": {
+      "pair_1": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "rec_05": {
+    "family": "records",
+    "split": "test",
+    "questions": {
+      "neg_1": {
+        "type": "noul",
+        "label": 0
+      },
+      "neg_2": {
+        "type": "noul",
+        "label": 0
+      },
+      "any_purchase": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "rec_06": {
+    "family": "records",
+    "split": "test",
+    "questions": {
+      "pair_1": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "rec_07": {
+    "family": "records",
+    "split": "test",
+    "questions": {
+      "pair_1": {
+        "type": "noul",
+        "label": 1
+      },
+      "pair_2": {
+        "type": "noul",
+        "label": 1
+      },
+      "neg_1": {
+        "type": "noul",
+        "label": 0
+      },
+      "neg_2": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "rec_08": {
+    "family": "records",
+    "split": "test",
+    "questions": {
+      "pair_1": {
+        "type": "noul",
+        "label": 1
+      },
+      "pair_2": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "rec_09": {
+    "family": "records",
+    "split": "test",
+    "questions": {
+      "pair_1": {
+        "type": "noul",
+        "label": 1
+      },
+      "pair_2": {
+        "type": "noul",
+        "label": 1
+      },
+      "neg_1": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "rec_10": {
+    "family": "records",
+    "split": "test",
+    "questions": {
+      "pair_1": {
+        "type": "noul",
+        "label": 1
+      },
+      "pair_2": {
+        "type": "noul",
+        "label": 1
+      },
+      "neg_1": {
+        "type": "noul",
+        "label": 0
+      },
+      "neg_2": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "rec_11": {
+    "family": "records",
+    "split": "test",
+    "questions": {
+      "pair_1": {
+        "type": "noul",
+        "label": 1
+      },
+      "pair_2": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "rec_12": {
+    "family": "records",
+    "split": "test",
+    "questions": {
+      "neg_1": {
+        "type": "noul",
+        "label": 0
+      },
+      "neg_2": {
+        "type": "noul",
+        "label": 0
+      },
+      "any_purchase": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "rec_13": {
+    "family": "records",
+    "split": "test",
+    "questions": {
+      "pair_1": {
+        "type": "noul",
+        "label": 1
+      },
+      "pair_2": {
+        "type": "noul",
+        "label": 1
+      },
+      "neg_1": {
+        "type": "noul",
+        "label": 0
+      },
+      "neg_2": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  },
+  "rec_14": {
+    "family": "records",
+    "split": "test",
+    "questions": {
+      "pair_1": {
+        "type": "noul",
+        "label": 1
+      },
+      "pair_2": {
+        "type": "noul",
+        "label": 1
+      }
+    }
+  },
+  "rec_15": {
+    "family": "records",
+    "split": "test",
+    "questions": {
+      "pair_1": {
+        "type": "noul",
+        "label": 1
+      },
+      "pair_2": {
+        "type": "noul",
+        "label": 1
+      },
+      "pair_3": {
+        "type": "noul",
+        "label": 1
+      },
+      "neg_1": {
+        "type": "noul",
+        "label": 0
+      },
+      "neg_2": {
+        "type": "noul",
+        "label": 0
+      }
+    }
+  }
+}

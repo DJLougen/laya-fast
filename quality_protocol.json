@@ -1,0 +1,26 @@
+{
+ "suite_source": "quality_suite.py",
+ "suite_sha256": "877e009f6d24b4d84724b5160a2fb7afd52b57b74b872d6324dda334bc0f5847",
+ "checkpoint": "English root as shipped",
+ "ground_truth": "Synthetic labels created for this benchmark; not independently human-annotated. Previously used in GLiNER comparison; no Laya-specific tuning.",
+ "threshold": 0.5,
+ "score_metrics": "argmax level accuracy and probability-weighted score MAE on 0..4 scale; subjective coarse rubric",
+ "primary": "All cases, excluding six predeclared ambiguous or contradictory individual judgments; original-label full results also retained",
+ "entities_and_records": "Verification of provided candidates, not unconstrained extraction. Candidate sets include ground truth.",
+ "exclusions": {
+  "route_11/confirm": "Prompt explicitly lists deploying as requiring confirmation, but legacy label exempts staging without stating that exemption.",
+  "cond_02/cond_mentions_deadline": "Before renewal is a timeframe for action under the actual question, despite legacy negative label.",
+  "rec_07/neg_1": "Text says Amara sold a bread machine to a neighbor; this entails the neighbor acquired it, contradicting negative label.",
+  "rec_10/neg_1": "Same model tent versus tent model is a defensible paraphrase; negative label is ambiguous.",
+  "rec_12/neg_1": "Pair question asks whether tourists bought mug, which the text supports; it does not ask for an individually identified buyer.",
+  "ver_05/supported": "HR enrollment and active deductions support enrollment; pending carrier confirmation makes the binary gold interpretation debatable."
+ },
+ "limits": [
+  "Directional application smoke benchmark, not production validation",
+  "Small correlated sample; no claim of general calibration reliability",
+  "No fine-tuning or temperature refitting",
+  "Root English only; no multilingual or typed-decisions checkpoint comparison"
+ ],
+ "expected_cases": 105,
+ "expected_decisions": 380
+}

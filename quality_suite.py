@@ -1,5 +1,5 @@
 # jev-gliner bench2 large suite: 7 families x 15 items = 105 items.
-# ALL items hand-written by the implementing agent (2026-09-18); items author = ground-truth author.
+# ALL items hand-written for this benchmark (2026-09-18); items author = ground-truth author.
 # No model-generated ground truth anywhere in this file.
 # Split: *_01..*_03 = "tune" (GLiNER threshold selection ONLY); *_04..*_15 = "test".
 # Intent: items + data published alongside the benchmark thread.

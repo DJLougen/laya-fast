@@ -14,10 +14,14 @@ source-typed-decisions/
 backups/
 *.safetensors
 *.mlpackage
+*.mlmodelc
+*.mlmodel
 ane/body*/model.mlmodelc/
 ane/body*/model.mlpackage/
 
 # Machine-local quality dumps (paths and a suite that is not in this repo).
 quality_*.json
+!quality_expected.json
+!quality_protocol.json
 quality_*.csv
 run_quality.py

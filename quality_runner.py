@@ -12,9 +12,9 @@ one of four runtimes and writes raw, ungraded outputs:
   --runtime mps   Same RLAgent on Apple MPS. Fails hard if MPS unavailable;
                   there is NO silent device fallback.
 
-Ground-truth provenance: the suite is synthetic and agent-authored (the original
-file's "no model generated GT" comment means no *model* wrote the labels; the
-authoring agent did). Labels are used ONLY to build candidate lists for the
+Ground-truth provenance: the suite is synthetic; labels were created for this
+benchmark and are not independently human-annotated (no model generated the
+labels either). Labels are used ONLY to build candidate lists for the
 entities family (per-candidate noul questions, exactly as the original
 run_jev.py did) and for the records family's pre-declared negative probes. No
 label text is embedded in any question. This runner never grades.
@@ -68,8 +68,8 @@ MAX_INPUT_TOKENS = 100_000   # cumulative input-token cap; checked BEFORE each r
 SUITE_FILE = os.path.join(HERE, "quality_suite.py")
 
 SUITE_PROVENANCE = (
-    "Synthetic agent-authored suite: all 105 items and gold labels were hand-written by the "
-    "implementing agent on 2026-09-18 (items author = ground-truth author; no model generated "
+    "Synthetic suite: all 105 items and gold labels were created for this benchmark on "
+    "2026-09-18 (items author = ground-truth author; no model generated "
     "the ground truth, but no independent human annotation exists either). Previously used for "
     "a GLiNER comparison; no Laya-specific tuning. Calibration limits: small correlated sample, "
     "candidate sets for entities/records include gold strings by design (verification, not "

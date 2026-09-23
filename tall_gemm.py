@@ -298,7 +298,7 @@ except Exception:  # Metal unavailable
 
 # Column-band width per N: smaller BN -> more threadgroups -> better occupancy
 # on 30 cores for small-N shapes. All encoder N (1024, 3072, 5248) divide all
-# of these; the table is tuned by /tmp/sweep_bn.py.
+# of these; the table is tuned by an in-context BN sweep.
 _KT = int(os.environ.get("TALL_KT", "64"))
 # (N, K) -> (BN, MPSG); tuned in-context on M3 Max (see module docstring).
 # Only the Wi GEMM (N=5248, K=1024) wins in the real encoder: it is the
