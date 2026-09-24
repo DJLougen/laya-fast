@@ -16,7 +16,7 @@ In scope: the MLX encoder and Metal kernels (`laya_mlx.py`), the ANE export/runt
 
 ## Submitting a kernel or router change
 
-1. Fork, set up per the README (venv, `hf download`, `convert.py`).
+1. Fork, set up per the README (`uv venv`, `uv pip install`, `hf download`, `convert.py`), including the development dependencies.
 2. Make the change. Keep it small enough to review in one sitting.
 3. Run `bash verify.sh` and paste the METRIC lines for before/after.
 4. In the PR, state: device (chip, GPU cores, RAM), dtype, model directory, and which fixture moved. "Faster on my machine" without the fixture table is not evidence.
@@ -34,10 +34,16 @@ In scope: the MLX encoder and Metal kernels (`laya_mlx.py`), the ANE export/runt
 
 All Python must pass `mypy --strict`. The gate command is:
 
-    git ls-files -z '*.py' | xargs -0 mypy
+    git ls-files -z '*.py' | xargs -0 .venv/bin/python -m mypy
 
 Config lives in `pyproject.toml` (`[tool.mypy]`); CI runs it as the `typecheck` / `mypy` check on every push and PR, and PRs that add untyped code are rejected. Annotate every function (parameters and returns, including `-> None` and `__init__`); use `# type: ignore[<code>]  # reason: ...` only with a specific error code and a reason — bare ignores do not pass.
 
 ## Setup
 
-See the README for environment setup, the fixture/benchmark table, and the map of which file owns which seam.
+Create the environment with `uv venv --python 3.12`, then install all dependencies needed by the verification gate:
+
+```bash
+uv pip install --python .venv/bin/python -r requirements-dev.txt -r requirements-export.txt
+```
+
+For an existing Python 3.12 `.venv`, run only the install command. See the README for model setup, the fixture/benchmark table, and the map of which file owns which seam.

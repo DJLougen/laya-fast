@@ -1,2 +1,4 @@
+# Development setup (after uv venv --python 3.12):
+#   uv pip install --python .venv/bin/python -r requirements-dev.txt -r requirements-export.txt
 -r requirements.txt
 mypy==2.3.1
