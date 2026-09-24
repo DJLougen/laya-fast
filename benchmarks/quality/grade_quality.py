@@ -6,7 +6,7 @@ import math
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, TypedDict, cast
+from typing import Any, NotRequired, TypedDict, cast
 
 import numpy as np
 
@@ -33,6 +33,7 @@ class Protocol(TypedDict):
 
     suite_source: str
     suite_sha256: str
+    compatible_suite_sha256: NotRequired[dict[str, str]]
     checkpoint: str
     ground_truth: str
     threshold: float
@@ -164,7 +165,8 @@ def grade(path: str, expected: dict[str, ExpectedTask], protocol: Protocol) -> t
     assert len(results) == len(expected), (len(results),len(expected))
     by_id = {r['id']:r for r in results}
     assert len(by_id)==len(results) and set(by_id)==set(expected)
-    assert raw['suite_sha256']==protocol['suite_sha256']
+    accepted_hashes = {protocol['suite_sha256'], *protocol.get('compatible_suite_sha256', {})}
+    assert raw['suite_sha256'] in accepted_hashes, 'Unrecognized quality suite fingerprint'
     rows: list[Row] = []
     for tid, task in expected.items():
         result=by_id[tid]
