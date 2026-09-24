@@ -53,7 +53,8 @@ Latency is not accuracy. The public [`benchmarks/quality/`](benchmarks/quality/)
 
 ## Prerequisites
 
-- Apple Silicon Mac, macOS, Python 3.12
+- Apple Silicon Mac, macOS
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for Python 3.12 and dependency setup (on macOS: `brew install uv`)
 - [`hf` CLI](https://huggingface.co/docs/huggingface_hub/en/guides/cli) (installed with `huggingface_hub` in `requirements.txt`)
 - ~2 GB disk for the converted fp16 weights; ~700 MB per Neural Engine bucket if you compile them
 
@@ -62,9 +63,11 @@ Latency is not accuracy. The public [`benchmarks/quality/`](benchmarks/quality/)
 ```bash
 git clone https://github.com/DJLougen/laya-fast.git
 cd laya-fast
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+uv venv --python 3.12
+uv pip install --python .venv/bin/python -r requirements.txt
 ```
+
+`uv` downloads Python 3.12 if needed. Commands below use `.venv` directly, so activation is optional. If you already have a Python 3.12 `.venv`, skip `uv venv` and run the install command.
 
 Download the official English checkpoint and convert it to MLX fp16:
 
@@ -147,7 +150,7 @@ Fork the repo. The seams:
 Each bucket is a fixed-length Core ML program. Neural Engine support needs the optional dependencies — install them on top of the base requirements (this also enables loading ANE bodies under `--agent fast`):
 
 ```bash
-.venv/bin/pip install -r requirements-export.txt
+uv pip install --python .venv/bin/python -r requirements-export.txt
 ```
 
 After `converted-fp16` exists, export the buckets:
@@ -165,6 +168,17 @@ To add a new length: export it, add it to the `ane_buckets` tuple in `LayaFast`,
 ### A different checkpoint
 
 `convert.py` knows the English Laya layout (`convaiinnovations/laya`). A fine-tune with the same tensor names converts the same way. A different encoder (the multilingual mmBERT checkpoint, for example) needs a new body in `ane/ane_model.py` and a new export.
+
+### Development setup
+
+After creating `.venv`, install the development and Neural Engine dependencies to type-check all tracked Python files and run the verification gate:
+
+```bash
+uv pip install --python .venv/bin/python -r requirements-dev.txt -r requirements-export.txt
+bash verify.sh
+```
+
+The gate also needs the converted model from the first-run steps. See [CONTRIBUTING.md](CONTRIBUTING.md) for configuration and validation requirements.
 
 ### Voice routing demo
 

@@ -3,7 +3,7 @@
 # running them via --agent fast (ane/ane_runtime.py loads bodies through
 # coremltools), and the PyTorch reference oracle (benchmarks/benchmark.py /
 # source/rl_common.py). Install on top of the base requirements:
-#   .venv/bin/pip install -r requirements-export.txt
+#   uv pip install --python .venv/bin/python -r requirements-export.txt
 
 torch
 coremltools

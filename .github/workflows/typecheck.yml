@@ -7,14 +7,14 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v10
         with:
-          python-version: "3.12"
-          cache: pip
+          enable-cache: true
+          cache-dependency-glob: "requirements*.txt"
       - name: Install dependencies
         run: |
-          pip install -r requirements-dev.txt
-          pip install -r requirements-export.txt
+          uv venv --python 3.12
+          uv pip install --python .venv/bin/python -r requirements-dev.txt -r requirements-export.txt
       - name: mypy --strict (all tracked files)
         run: |
-          git ls-files -z '*.py' | xargs -0 mypy
+          git ls-files -z '*.py' | xargs -0 .venv/bin/python -m mypy
