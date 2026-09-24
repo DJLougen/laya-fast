@@ -11,7 +11,7 @@ import sys
 LOCK = "/tmp/laya_gpu.lock"
 
 
-def main():
+def main() -> int:
     argv = sys.argv[1:]
     if argv and argv[0] == "--":
         argv = argv[1:]

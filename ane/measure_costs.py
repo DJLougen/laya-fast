@@ -10,19 +10,28 @@ Output: ane/cost_model.json
 import json
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any, TypedDict, cast
 
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "benchmarks"))
 
-import benchmark
+import benchmark  # type: ignore[import-not-found]  # reason: sibling module resolved via sys.path.insert(benchmarks dir) above
 import laya_api
-from ane.ane_runtime import LayaANE
+from ane.ane_runtime import ForwardItem, LayaANE
 
 
-def _p50(fn, n=15, warmup=3):
+class CostReport(TypedDict):
+    """cost_model.json payload: per-bucket ANE ms and per-(n,L) MLX ms."""
+
+    ane_per_question_ms: dict[int, float]
+    mlx_batch_ms: dict[str, float]
+
+
+def _p50(fn: Callable[[], Any], n: int = 15, warmup: int = 3) -> float:
     for _ in range(warmup):
         fn()
     ts = []
@@ -33,11 +42,11 @@ def _p50(fn, n=15, warmup=3):
     return float(np.median(ts))
 
 
-def main():
+def main() -> None:
     import mlx.core as mx
     mx.set_cache_limit(1 << 30)
 
-    report = {"ane_per_question_ms": {}, "mlx_batch_ms": {}}
+    report: CostReport = {"ane_per_question_ms": {}, "mlx_batch_ms": {}}
 
     ane = LayaANE("converted-fp16", buckets=[64, 80, 96, 128])
     # Real items from batch8_short cover lengths 68..104; synthesize one item per
@@ -47,15 +56,15 @@ def main():
     for L in ane.buckets:
         src = items[0]
         n = min(len(src["ids"]), L)
-        item = {"ids": src["ids"][:n], "qtype": src["qtype"],
-                "markers": [m for m in src["markers"] if m < n] or [0]}
+        item: ForwardItem = {"ids": src["ids"][:n], "qtype": src["qtype"],
+                                "markers": [m for m in src["markers"] if m < n] or [0]}
         report["ane_per_question_ms"][L] = _p50(lambda: ane.forward_one(item))
         print("ane L=%d (len %d): %.2f ms" % (L, len(item["ids"]),
                                               report["ane_per_question_ms"][L]), file=sys.stderr)
 
     mlx = laya_api.LayaMLX("converted-fp16", dtype="float16", compile=True)
 
-    def sync():
+    def sync() -> None:
         if mlx.last_raw is not None:
             mx.eval(*mlx.last_raw)
 
@@ -64,7 +73,7 @@ def main():
     base_items = items  # real prepared items, lens 68..104
     for L in (96, 128, 256, 512):
         for n in (1, 2, 4, 8):
-            rows = []
+            rows: list[ForwardItem] = []
             for i in range(n):
                 src = base_items[i % len(base_items)]
                 seq = list(src["ids"])
@@ -73,10 +82,11 @@ def main():
                 rows.append({"ids": seq + [pad_id] * 0, "markers": src["markers"],
                              "qtype": src["qtype"]})
             batch = laya_api.collate_items(
-                [{"ids": (r["ids"] + [pad_id] * (L - len(r["ids"])))[:L],
-                  "markers": r["markers"], "qtype": r["qtype"]} for r in rows],
+                [cast(laya_api.Item, {"ids": (r["ids"] + [pad_id] * (L - len(r["ids"])))[:L],
+                                      "markers": r["markers"], "qtype": r["qtype"]})
+                 for r in rows],
                 pad_id)
-            def call():
+            def call() -> None:
                 mlx.raw_forward(batch)
                 sync()
             report["mlx_batch_ms"]["%d@%d" % (n, L)] = _p50(call)

@@ -21,9 +21,19 @@ Two criteria dicts with the same pairs in different order are NOT merged —
 option order changes the rendered sequence and can change the answer.
 """
 import json
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    import laya_api
 
 
-def _qkey(q):
+class _SystemOneAgent(Protocol):
+    """Anything exposing the Jev-shaped ``system_one`` request API."""
+
+    def system_one(self, state: Any, questions: "laya_api.Questions") -> "laya_api.SystemOneResult": ...
+
+
+def _qkey(q: "laya_api.QuestionDef") -> tuple[Any, Any, str]:
     """Canonical identity of a question's model-visible content."""
     crit = q.get("criteria")
     # Preserve mapping order: option order is part of the model input.
@@ -34,7 +44,7 @@ def _qkey(q):
     return (q.get("type"), q.get("instructions"), crit_repr)
 
 
-def dedup_system_one(agent, state, questions):
+def dedup_system_one(agent: _SystemOneAgent, state: Any, questions: "laya_api.Questions") -> "laya_api.SystemOneResult":
     """Like agent.system_one(state, questions) but runs one forward per unique
     (type, instructions, criteria) question and fans answers back to all ids."""
     if not questions:
@@ -44,9 +54,9 @@ def dedup_system_one(agent, state, questions):
 
     # First occurrence wins; rep qid is the id of the first question with
     # this exact (type, instructions, criteria) content.
-    reps = {}          # key -> rep qid
-    rep_of = {}        # qid -> rep qid
-    unique_questions = {}
+    reps: dict[tuple[Any, Any, str], str] = {}   # key -> rep qid
+    rep_of: dict[str, str] = {}                 # qid -> rep qid
+    unique_questions: "laya_api.Questions" = {}
     for qid, q in questions.items():
         k = _qkey(q)
         rep = reps.get(k)

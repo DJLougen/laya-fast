@@ -4,6 +4,8 @@
 # Split: *_01..*_03 = "tune" (GLiNER threshold selection ONLY); *_04..*_15 = "test".
 # Intent: items + data published alongside the benchmark thread.
 
+from typing import Any, NotRequired, TypedDict
+
 FAMILIES = ["route", "conditions", "aspects", "entities", "severity", "verify", "records"]
 
 ACTION_LABELS = ["read", "write", "delete", "summarize"]
@@ -21,11 +23,23 @@ ASPECT_LABELS = ["camera", "performance", "battery", "display", "price"]
 ENT_LABELS = ["company", "person", "product", "location"]
 SEV_LEVELS = ["trivial", "minor", "moderate", "major", "critical"]
 
-TASKS = []
+
+class Task(TypedDict):
+    """One suite case: id, family, tune/test split, model input, ground truth."""
+
+    id: str
+    family: str
+    split: str
+    input: Any
+    gt: Any
+    distractors: NotRequired[Any]
+    gt_rationale: str
+
+TASKS: list[Task] = []
 
 # ------------------------------------------------------------------ ROUTE (15)
 # gt: action (read/write/delete/summarize) + confirm (destructive_requires_confirmation)
-_route = [
+_route: list[tuple[str, dict[str, str], str]] = [
     ("Can you delete the temporary report file at /tmp/report_q3.pdf? It's taking up space.",
      {"action": "delete", "confirm": "yes"},
      "deletes an existing file: irreversible, confirm first"),
@@ -72,6 +86,7 @@ _route = [
      {"action": "write", "confirm": "yes"},
      "changes live production state under incident pressure; irreversible in effect"),
 ]
+gt: Any  # loop target reused across families with different gt shapes
 for i, (text, gt, rat) in enumerate(_route, 1):
     TASKS.append({"id": f"route_{i:02d}", "family": "route",
                   "split": "tune" if i <= 3 else "test",
@@ -79,7 +94,7 @@ for i, (text, gt, rat) in enumerate(_route, 1):
 
 # ------------------------------------------------------------- CONDITIONS (15)
 # gt: yes/no per 5 fixed labels. >=4 items all-5-true; >=4 items <=2 true (balance asserted).
-_cond = [
+_cond: list[tuple[str, dict[str, str], str]] = [
     ("This is the THIRD time I'm writing about invoice #8821. You charged my card $349.00 twice for the same "
      "subscription. I opened ticket #5521 three weeks ago and your team closed it without doing anything. "
      "I need this refunded by Friday or I'm calling my bank and disputing the charge. Unbelievable.",
@@ -157,7 +172,7 @@ for i, (text, gt, rat) in enumerate(_cond, 1):
 
 # --------------------------------------------------------------- ASPECTS (15)
 # gt: which of 5 fixed labels the review expresses an opinion on. Present-count varies 1..5.
-_asp = [
+_asp: list[tuple[str, list[str], str]] = [
     ("Great camera quality, decent performance, but poor battery life and the display scratches far too easily.",
      ["camera", "performance", "battery", "display"],
      "opinions on camera, performance, battery, display; price absent"),
@@ -216,7 +231,7 @@ for i, (text, gt, rat) in enumerate(_asp, 1):
 # -------------------------------------------------------------- ENTITIES (15)
 # gt spans per label + 2 distractor candidate strings per text (real substrings fitting a DIFFERENT
 # label). Jev sees gt spans + distractors + 'none' as choice candidates; scored against gt only.
-_ents = [
+_ents: list[tuple[Any, ...]] = [
     ("Amazon CEO Andy Jassy unveiled the Bedrock platform at the summit in Las Vegas.",
      {"company": ["Amazon"], "person": ["Andy Jassy"], "product": ["Bedrock"], "location": ["Las Vegas"]},
      {"company": ["Bedrock"], "person": ["CEO"], "product": ["Amazon"], "location": ["the summit"]},
@@ -300,7 +315,7 @@ for i, tup in enumerate(_ents, 1):
 
 # -------------------------------------------------------------- SEVERITY (15)
 # gt: level in 5 ordered levels; 3 items per level. Rationale states business impact.
-_sev = [
+_sev: list[tuple[str, str, str]] = [
     ("The FAQ page shows a 2024 copyright year in the footer.",
      "trivial",
      "cosmetic text only; zero workflow impact"),
@@ -356,7 +371,7 @@ for i, (text, level, rat) in enumerate(_sev, 1):
 # gt: supported yes/no; BALANCED 8 no / 7 yes. Evidence shapes: numeric mismatch, stale date,
 # scope mismatch, actually-consistent, consistent-with-confounder.
 # Counterfactual logic tested: a fact that COULD explain the mismatch but is itself unverified.
-_ver = [
+_ver: list[tuple[dict[str, Any], str, str]] = [
     ({"claim": "The invoice total matches the approved purchase order.",
       "evidence": {"invoice": {"number": "INV-88", "total_usd": 2300},
                    "purchase_order": {"id": "PO-112", "approved_total_usd": 1900},
@@ -450,7 +465,7 @@ for i, (inp, supported, rat) in enumerate(_ver, 1):
 # ---------------------------------------------------------------- RECORDS (15)
 # gt: (buyer,item) purchase pairs from 1-3 events. >=3 items trip GLiNER's pilot failure mode
 # (same buyer twice / same item twice / cross-alignment).
-_rec = [
+_rec: list[tuple[str, list[tuple[str, str]], str]] = [
     ("Nina bought a desk lamp and Omar bought a whiteboard.",
      [("Nina", "desk lamp"), ("Omar", "whiteboard")],
      "two clean events"),
@@ -500,7 +515,7 @@ _rec = [
 ]
 # Suite-provided NEGATIVE probes (pre-decided, never invented at runtime): cross-pair and
 # role-reversal traps. A model that answers "yes" to everything fails these.
-_rec_negatives = {
+_rec_negatives: dict[str, list[tuple[str, str]]] = {
     "rec_01": [("Nina", "whiteboard"), ("Omar", "desk lamp")],
     "rec_02": [("Priya", "desk lamp")],
     "rec_03": [("Delta Design", "whiteboard")],

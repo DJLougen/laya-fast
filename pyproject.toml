@@ -1,0 +1,20 @@
+[tool.mypy]
+python_version = "3.12"
+strict = true
+explicit_package_bases = true
+mypy_path = "."
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+warn_unreachable = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = "tokenizers"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "coremltools"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "coremltools.optimize.coreml"
+ignore_missing_imports = true

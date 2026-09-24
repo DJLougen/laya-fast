@@ -12,6 +12,8 @@ explicit einsum, masks are additive fp16. Weights load straight from
 converted-fp16/model.safetensors (identity names); no torch model needed.
 """
 
+from typing import Any, cast
+
 import numpy as np
 import torch
 from torch import nn
@@ -19,7 +21,7 @@ from torch.nn import functional as F
 from safetensors import safe_open
 
 
-def conv_from_weights(weight, bias=None):
+def conv_from_weights(weight: torch.Tensor, bias: torch.Tensor | None = None) -> nn.Conv2d:
     result = nn.Conv2d(weight.shape[1], weight.shape[0], 1, bias=bias is not None)
     result.weight = nn.Parameter(weight.detach()[:, :, None, None])
     if bias is not None:
@@ -30,15 +32,16 @@ def conv_from_weights(weight, bias=None):
 class ChannelNorm(nn.Module):
     """LayerNorm over the channel axis of BC1S, original affine ordering."""
 
-    def __init__(self, weight, bias=None, eps=1e-5):
+    def __init__(self, weight: torch.Tensor, bias: torch.Tensor | None = None,
+                 eps: float = 1e-5) -> None:
         super().__init__()
         self.eps = float(eps)
         self.weight = nn.Parameter(weight.detach()[None, :, None, None])
-        self.bias = None
+        self.bias: nn.Parameter | None = None
         if bias is not None:
             self.bias = nn.Parameter(bias.detach()[None, :, None, None])
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         centered = x - x.mean(dim=1, keepdim=True)
         out = centered * (centered.square().mean(dim=1, keepdim=True) + self.eps).rsqrt()
         out = out * self.weight
@@ -47,29 +50,35 @@ class ChannelNorm(nn.Module):
 
 class ConvAttention(nn.Module):
     """Per-head explicit attention in BC1S. rope=True applies rotate-half RoPE
-    with precomputed [1, head_dim, 1, L] cos/sin buffers."""
 
-    def __init__(self, w_qkv, b_qkv, w_out, b_out, num_heads, head_dim, *, rope, length, theta=None):
+    with precomputed [1, head_dim, 1, L] cos/sin buffers."""
+    cos: torch.Tensor
+    sin: torch.Tensor
+
+    def __init__(self, w_qkv: torch.Tensor, b_qkv: torch.Tensor | None, w_out: torch.Tensor,
+                 b_out: torch.Tensor | None, num_heads: int, head_dim: int, *,
+                 rope: bool, length: int, theta: float | None = None) -> None:
         super().__init__()
         self.rope = rope
         self.heads, self.dim = num_heads, head_dim
         self.qkv = conv_from_weights(w_qkv, b_qkv)
         self.out = conv_from_weights(w_out, b_out)
         if rope:
+            assert theta is not None
             inv = 1.0 / (float(theta) ** (torch.arange(0, head_dim, 2).float() / head_dim))
             freqs = torch.arange(length).float()[:, None] * inv[None, :]  # [L, D/2]
             self.register_buffer("cos", freqs.cos().T[None, :, None, :])  # [1, D/2, 1, L]
             self.register_buffer("sin", freqs.sin().T[None, :, None, :])
 
-    def rotate(self, x):
+    def rotate(self, x: torch.Tensor) -> torch.Tensor:
         left, right = x.chunk(2, dim=1)
         return torch.cat(
             (left * self.cos - right * self.sin, right * self.cos + left * self.sin), dim=1
         )
 
-    def forward(self, x, mask):
+    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         q, k, v = self.qkv(x).chunk(3, dim=1)
-        output = []
+        output: list[torch.Tensor] = []
         for qi, ki, vi in zip(
             q.split(self.dim, dim=1), k.split(self.dim, dim=1), v.split(self.dim, dim=1)
         ):
@@ -78,28 +87,29 @@ class ConvAttention(nn.Module):
             scores = torch.einsum("bchq,bkhc->bkhq", qi, ki.transpose(1, 3)) * (self.dim**-0.5)
             probabilities = F.softmax(scores + mask, dim=1)
             output.append(torch.einsum("bkhq,bchk->bchq", probabilities, vi))
-        return self.out(torch.cat(output, dim=1))
+        return cast(torch.Tensor, self.out(torch.cat(output, dim=1)))
 
 
 class ConvMLP(nn.Module):
     """GLU MLP: Wi -> split(value, gate) -> gelu(value) * gate -> Wo."""
 
-    def __init__(self, wi, wo):
+    def __init__(self, wi: torch.Tensor, wo: torch.Tensor) -> None:
         super().__init__()
         self.Wi, self.Wo = conv_from_weights(wi), conv_from_weights(wo)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         value, gate = self.Wi(x).chunk(2, dim=1)
-        return self.Wo(F.gelu(value) * gate)
+        return cast(torch.Tensor, self.Wo(F.gelu(value) * gate))
 
 
 class ConvEncoderLayer(nn.Module):
-    def __init__(self, tensors, prefix, cfg, layer_idx, length):
+    def __init__(self, tensors: dict[str, torch.Tensor], prefix: str, cfg: dict[str, Any],
+                 layer_idx: int, length: int) -> None:
         super().__init__()
-        self.kind = cfg["layer_types"][layer_idx]
+        self.kind: str = cfg["layer_types"][layer_idx]
         eps = cfg["norm_eps"]
         attn_norm_w = tensors.get(prefix + "attn_norm.weight")  # layer 0 has none
-        self.attn_norm = (
+        self.attn_norm: nn.Module = (
             nn.Identity()
             if attn_norm_w is None
             else ChannelNorm(attn_norm_w, eps=eps)
@@ -119,16 +129,17 @@ class ConvEncoderLayer(nn.Module):
         self.mlp_norm = ChannelNorm(tensors[prefix + "mlp_norm.weight"], eps=eps)
         self.mlp = ConvMLP(tensors[prefix + "mlp.Wi.weight"], tensors[prefix + "mlp.Wo.weight"])
 
-    def forward(self, x, mask):
+    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         x = x + self.attn(self.attn_norm(x), mask)
-        return x + self.mlp(self.mlp_norm(x))
+        return cast(torch.Tensor, x + self.mlp(self.mlp_norm(x)))
 
 
 class ConvHeadLayer(nn.Module):
     """torch.nn.TransformerEncoderLayer(norm_first=True): biased MHA (no RoPE),
     ReLU FFN, LayerNorms with bias."""
 
-    def __init__(self, tensors, prefix, cfg, length):
+    def __init__(self, tensors: dict[str, torch.Tensor], prefix: str, cfg: dict[str, Any],
+                 length: int) -> None:
         super().__init__()
         d = cfg["hidden_size"]
         nhead = max(1, d // 64)
@@ -148,9 +159,9 @@ class ConvHeadLayer(nn.Module):
         self.linear1 = conv_from_weights(tensors[prefix + "linear1.weight"], tensors[prefix + "linear1.bias"])
         self.linear2 = conv_from_weights(tensors[prefix + "linear2.weight"], tensors[prefix + "linear2.bias"])
 
-    def forward(self, x, mask):
+    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         x = x + self.attn(self.norm1(x), mask)
-        return x + self.linear2(F.relu(self.linear1(self.norm2(x))))
+        return cast(torch.Tensor, x + self.linear2(F.relu(self.linear1(self.norm2(x)))))
 
 
 class ConvBody(nn.Module):
@@ -168,14 +179,14 @@ class ConvBody(nn.Module):
 
     MAX_MARKERS = 32
 
-    def __init__(self, model_dir, length):
+    def __init__(self, model_dir: str, length: int) -> None:
         super().__init__()
         import json
         import os
 
-        cfg = json.load(open(os.path.join(model_dir, "encoder", "config.json")))
-        agent_cfg = json.load(open(os.path.join(model_dir, "rl_agent_config.json")))
-        tensors = {}
+        cfg: dict[str, Any] = json.load(open(os.path.join(model_dir, "encoder", "config.json")))
+        agent_cfg: dict[str, Any] = json.load(open(os.path.join(model_dir, "rl_agent_config.json")))
+        tensors: dict[str, torch.Tensor] = {}
         with safe_open(os.path.join(model_dir, "model.safetensors"), framework="pt") as f:
             for key in f.keys():
                 tensors[key] = f.get_tensor(key)
@@ -200,9 +211,10 @@ class ConvBody(nn.Module):
             nn.GELU(),
             conv_from_weights(tensors["scorer.3.weight"], tensors["scorer.3.bias"]),
         )
-        self.cfg = cfg
+        self.cfg: dict[str, Any] = cfg
 
-    def forward(self, embeddings, full_mask, local_mask, type_vectors, marker_map):
+    def forward(self, embeddings: torch.Tensor, full_mask: torch.Tensor, local_mask: torch.Tensor,
+                type_vectors: torch.Tensor, marker_map: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         x = self.embedding_norm(embeddings)
         for layer in self.layers:
             x = layer(x, full_mask if layer.kind == "full_attention" else local_mask)

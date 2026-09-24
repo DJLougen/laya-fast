@@ -17,6 +17,7 @@ import shutil
 import sys
 import time
 from pathlib import Path
+from typing import Any, NotRequired, TypedDict
 
 import numpy as np
 import torch
@@ -27,7 +28,19 @@ from ane.ane_model import ConvBody
 from ane.export import compute_plan
 
 
-def build_inputs(body, L, B, seed=0):
+
+class BatchExportReport(TypedDict):
+    """report.json payload for one batched-body export/verify run."""
+
+    length: int
+    batch: int
+    logits_absmax: float
+    vs_single_max_abs_logit_diff: float
+    vs_single_max_abs_pooled_diff: float
+    seconds: NotRequired[float]
+
+
+def build_inputs(body: ConvBody, L: int, B: int, seed: int = 0) -> dict[str, torch.Tensor]:
     rng = np.random.default_rng(seed)
     width = body.cfg["hidden_size"]
     inputs = {
@@ -41,7 +54,7 @@ def build_inputs(body, L, B, seed=0):
     return inputs
 
 
-def export(model_dir, L, B, dest, verify_only=False):
+def export(model_dir: str, L: int, B: int, dest: Path, verify_only: bool = False) -> BatchExportReport:
     import coremltools as ct
 
     torch.set_num_threads(4)
@@ -50,7 +63,7 @@ def export(model_dir, L, B, dest, verify_only=False):
     target = dest / "model.mlpackage"
     if not verify_only:
         with torch.inference_mode():
-            traced = torch.jit.trace(body, tuple(inputs.values()), strict=True, check_trace=False)
+            traced = torch.jit.trace(body, tuple(inputs.values()), strict=True, check_trace=False)  # type: ignore[no-untyped-call]  # reason: torch.jit.trace is untyped in torch stubs
         converted = ct.convert(
             traced, source="pytorch", convert_to="mlprogram",
             inputs=[ct.TensorType(name=n, shape=tuple(v.shape), dtype=np.float16)
@@ -89,7 +102,7 @@ def export(model_dir, L, B, dest, verify_only=False):
             "vs_single_max_abs_pooled_diff": d_pooled}
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--model", default="converted-fp16")
     ap.add_argument("--length", type=int, required=True)

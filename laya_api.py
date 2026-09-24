@@ -23,49 +23,166 @@ import json
 import math
 import os
 import sys
+from collections.abc import Callable
+from typing import Any, Literal, NotRequired, TypedDict, cast
 
 import numpy as np
+import numpy.typing as npt
 
-QTYPES = {"choice": 0, "score": 1, "noul": 2}
-QTYPE_NAMES = {v: k for k, v in QTYPES.items()}
+QTYPES: dict[str, int] = {"choice": 0, "score": 1, "noul": 2}
+QTYPE_NAMES: dict[int, str] = {v: k for k, v in QTYPES.items()}
 
+
+class InternalQ(TypedDict):
+    """Question normalized for rendering (``_to_internal`` output)."""
+
+    t: str
+    ins: str
+    crit: Any
+
+
+class QuestionDef(TypedDict):
+    """One question in a Jev ``system_one`` request (``questions`` map value).
+
+    ``criteria`` is optional (noul questions omit it); ``legend`` is accepted
+    for forward compatibility with Jev request payloads that carry it.
+    """
+
+    type: str
+    instructions: Any
+    criteria: NotRequired[Any]
+    legend: NotRequired[Any]
+
+
+Questions = dict[str, QuestionDef]
+
+
+class Item(TypedDict):
+    """One prepared question: token ids, marker positions, type, and its InternalQ."""
+
+    ids: list[int]
+    markers: list[int]
+    qtype: int
+    q: InternalQ
+
+
+class Batch(TypedDict):
+    """Numpy batch consumed by the MLX model."""
+
+    input_ids: npt.NDArray[np.int64]
+    attention_mask: npt.NDArray[np.int64]
+    marker_pos: npt.NDArray[np.int64]
+    marker_mask: npt.NDArray[np.bool_]
+    qtype: npt.NDArray[np.int64]
+    n_tokens: NotRequired[int]
+
+
+class PackMaps(TypedDict):
+    """Numpy index maps for the unpadded forward (``_pack_maps`` output)."""
+
+    flat_idx: npt.NDArray[np.int32]
+    slot_src: npt.NDArray[np.int32]
+    seq_of: npt.NDArray[np.int32]
+    cls_idx: npt.NDArray[np.int32]
+    marker_idx: npt.NDArray[np.int32]
+
+
+class RLAgentExt(TypedDict):
+    """Per-answer extension block carrying the act head's probability."""
+
+    act_probability: float
+
+
+class ChoiceAnswer(TypedDict):
+    """system_one answer for a ``choice`` question."""
+
+    type: Literal["choice"]
+    choice: Any
+    probabilities: dict[Any, float]
+    confidence: float
+    rl_agent: RLAgentExt
+
+
+class ScoreAnswer(TypedDict):
+    """system_one answer for a ``score`` question."""
+
+    type: Literal["score"]
+    score: float
+    legend: dict[str, Any]
+    probabilities: dict[str, float]
+    confidence: float
+    rl_agent: RLAgentExt
+
+
+class NoulAnswer(TypedDict):
+    """system_one answer for a ``noul`` question."""
+
+    type: Literal["noul"]
+    noul: float
+    rl_agent: RLAgentExt
+
+
+Answer = ChoiceAnswer | ScoreAnswer | NoulAnswer
+
+
+class DedupInfo(TypedDict):
+    """dedup.py's usage extension: request vs unique-question counts."""
+
+    questions: int
+    unique: int
+
+
+class Usage(TypedDict):
+    """Token accounting on a system_one result."""
+
+    input_tokens: int
+    output_tokens: int
+    dedup: NotRequired[DedupInfo]
+
+
+class SystemOneResult(TypedDict):
+    """Jev-shaped ``system_one`` response."""
+
+    model: str
+    answers: dict[str, Answer]
+    usage: Usage
 
 # ----------------------------------------------------------------------------- tokenizer
 class _Tokenizer:
     """Minimal wrapper over tokenizers.Tokenizer matching the AutoTokenizer surface
     that build_sequence uses (special-token ids + encode without special tokens)."""
 
-    def __init__(self, tok_dir):
+    def __init__(self, tok_dir: str) -> None:
         from tokenizers import Tokenizer
         self._tk = Tokenizer.from_file(os.path.join(tok_dir, "tokenizer.json"))
-        cfg = {}
+        cfg: dict[str, Any] = {}
         cfg_path = os.path.join(tok_dir, "tokenizer_config.json")
         if os.path.exists(cfg_path):
             with open(cfg_path) as f:
                 cfg = json.load(f)
         # ModernBERT defaults; overridden by tokenizer_config.json when present.
-        self.mask_token = cfg.get("mask_token", "[MASK]")
+        self.mask_token: str = cfg.get("mask_token", "[MASK]")
         self.mask_token_id = self._id(self.mask_token, 50284)
         self.cls_token_id = self._id(cfg.get("cls_token", "[CLS]"), 50281)
         self.sep_token_id = self._id(cfg.get("sep_token", "[SEP]"), 50282)
         self.pad_token_id = self._id(cfg.get("pad_token", "[PAD]"), 50283)
 
-    def _id(self, token, default):
+    def _id(self, token: str, default: int) -> int:
         tid = self._tk.token_to_id(token)
         return int(tid) if tid is not None else default
 
-    def __call__(self, text, add_special_tokens=False):
+    def __call__(self, text: str, add_special_tokens: bool = False) -> dict[str, list[int]]:
         return {"input_ids": self._tk.encode(text, add_special_tokens=add_special_tokens).ids}
 
 
 # ----------------------------------------------------------------------------- rendering (exact port of rl_common.py)
-def serialize_state(state):
+def serialize_state(state: Any) -> str:
     if isinstance(state, str):
         return state
     return json.dumps(state, ensure_ascii=False)
 
 
-def render_options(q):
+def render_options(q: InternalQ) -> list[str]:
     """Option texts in label-index order. Noul is always [false, true] so p[1] == noul."""
     t, crit = q["t"], q.get("crit")
     if t == "choice":
@@ -77,7 +194,7 @@ def render_options(q):
             "true: " + (crit.get("true") or "yes, the statement holds")]
 
 
-def build_sequence(tok, state, q, max_len, head_max_len, state_ids=None):
+def build_sequence(tok: _Tokenizer, state: Any, q: InternalQ, max_len: int, head_max_len: int, state_ids: list[int] | None = None) -> tuple[list[int], list[int]]:
     """[CLS] <type> instructions [SEP] [MASK] opt0 [MASK] opt1 ... [SEP] state [SEP].
 
     Returns input_ids and the positions of the per-option [MASK] markers.
@@ -87,7 +204,7 @@ def build_sequence(tok, state, q, max_len, head_max_len, state_ids=None):
     opts = render_options(q)
     ins = str(q["ins"]).replace(mask_tok, " ")
     head_ids = tok("%s question: %s" % (q["t"], ins), add_special_tokens=False)["input_ids"]
-    opt_ids = []
+    opt_ids: list[list[int]] = []
     for i in range(len(opts)):
         opt_ids.append([tok.mask_token_id] + tok(" " + opts[i].replace(mask_tok, " "),
                                                add_special_tokens=False)["input_ids"][:48])
@@ -98,7 +215,7 @@ def build_sequence(tok, state, q, max_len, head_max_len, state_ids=None):
         opt_budget = head_max_len - sum(len(o) for o in opt_ids)
     head_ids = head_ids[:max(8, opt_budget)]
     ids = [tok.cls_token_id] + head_ids + [tok.sep_token_id]
-    markers = []
+    markers: list[int] = []
     for o in opt_ids:
         markers.append(len(ids))
         ids.extend(o)
@@ -112,7 +229,7 @@ def build_sequence(tok, state, q, max_len, head_max_len, state_ids=None):
     return ids[:max_len], [m for m in markers if m < max_len]
 
 
-def collate_items(items, pad_id):
+def collate_items(items: list[Item], pad_id: int) -> Batch:
     """Numpy port of rl_common.collate_items for the inference fields."""
     n, L = len(items), max(len(it["ids"]) for it in items)
     kmax = max(len(it["markers"]) for it in items)
@@ -131,13 +248,13 @@ def collate_items(items, pad_id):
             "n_tokens": int(att.sum())}
 
 
-def temp_bucket(qtype, k):
+def temp_bucket(qtype: int, k: int) -> str:
     """Key for per-cardinality temperature fitting."""
     size = "2" if k <= 2 else "3-5" if k <= 5 else "6-10" if k <= 10 else "11+"
     return "%s:%s" % (QTYPE_NAMES[int(qtype)], size)
 
 
-def confidence_from_probs(p, k):
+def confidence_from_probs(p: npt.NDArray[np.float32], k: int) -> float:
     """Jev-style confidence: 1 - normalized entropy of the answer distribution."""
     if k < 2:
         return 1.0
@@ -146,7 +263,7 @@ def confidence_from_probs(p, k):
     return float(1 - ent / math.log(k))
 
 
-def _to_internal(qdef):
+def _to_internal(qdef: QuestionDef) -> InternalQ:
     t = qdef["type"]
     crit = qdef.get("criteria")
     if t == "choice" and isinstance(crit, list):
@@ -167,21 +284,21 @@ _K_BUCKET = 8    # marker-count buckets: multiples of 8
 _T_BUCKET = 64   # packed-row buckets: multiples of 64 (one GEMM tile row)
 
 
-def _round_up(n, m):
+def _round_up(n: int, m: int) -> int:
     return ((int(n) + m - 1) // m) * m
 
 
-def _bucket_batch(batch, pad_id):
+def _bucket_batch(batch: Batch, pad_id: int) -> tuple[Batch, int]:
     """Right-pad input_ids/attention_mask to L_bucket and marker arrays to
     K_bucket. Returns (batch, k_orig); caller slices logits[:, :k_orig]."""
     ids = batch["input_ids"]
-    B, L = ids.shape
+    B, L = cast(tuple[int, int], ids.shape)
     Lb = _round_up(L, _L_BUCKET)
     K = batch["marker_pos"].shape[1]
     Kb = _round_up(K, _K_BUCKET)
     if Lb == L and Kb == K:
         return batch, K
-    out = dict(batch)
+    out = cast(Batch, dict(batch))
     if Lb != L:
         ids2 = np.full((B, Lb), pad_id, dtype=ids.dtype)
         ids2[:, :L] = ids
@@ -197,7 +314,7 @@ def _bucket_batch(batch, pad_id):
     return out, K
 
 
-def _bucket_pack(pack):
+def _bucket_pack(pack: PackMaps) -> PackMaps:
     """Pad packed rows to a T_bucket multiple with dummy rows that alias packed
     row 0 (seq 0's CLS token). Their outputs are computed and discarded; no
     padded slot or marker references them, so results are unchanged."""
@@ -205,7 +322,7 @@ def _bucket_pack(pack):
     Tb = _round_up(T, _T_BUCKET)
     if Tb == T:
         return pack
-    out = dict(pack)
+    out = cast(PackMaps, dict(pack))
     out["flat_idx"] = np.concatenate(
         [pack["flat_idx"], np.zeros(Tb - T, dtype=np.int32)])
     out["seq_of"] = np.concatenate(
@@ -217,8 +334,10 @@ def _bucket_pack(pack):
 class LayaMLX:
     """MLX twin of rl_agent_api.RLAgent. Same request/response contract as Jev's system_one."""
 
-    def __init__(self, model_dir, dtype="float32", compile=False, unpad=None,
-                 bucket=None, cold_dispatch=None, compile_packed=None, warmup=False):
+    def __init__(self, model_dir: str, dtype: str = "float32", compile: bool = False,
+                 unpad: bool | None = None, bucket: bool | None = None,
+                 cold_dispatch: bool | None = None, compile_packed: bool | None = None,
+                 warmup: bool = False) -> None:
         import mlx.core as mx
         from laya_mlx import load_model, _resolve_model_dir
         # Bound MLX's freed-buffer cache. MLX's default cache ceiling on this
@@ -234,11 +353,12 @@ class LayaMLX:
             mx.set_cache_limit(_cache_mb << 20)
         model_dir = _resolve_model_dir(model_dir)
         with open(os.path.join(model_dir, "rl_agent_config.json")) as f:
-            self.cfg = json.load(f)
+            self.cfg: dict[str, Any] = json.load(f)
         self.tok = _Tokenizer(os.path.join(model_dir, "tokenizer"))
         self.model = load_model(model_dir, dtype=dtype)
         self.compiled = bool(compile)
-        self._forward_fn = mx.compile(self.model) if self.compiled else self.model
+        self._forward_fn: Callable[..., tuple[mx.array, mx.array]] = (
+            mx.compile(self.model) if self.compiled else self.model)
         # Unpadded (varlen) forward for batches with padding. Default on;
         # LAYA_UNPAD=0 or unpad=False forces the old padded path (A/B flag).
         self.unpad = (os.environ.get("LAYA_UNPAD", "1") != "0") if unpad is None else bool(unpad)
@@ -247,23 +367,25 @@ class LayaMLX:
         # OFF by default; LAYA_COMPILE_PACKED=1 restores the old behaviour.
         self.compile_packed = (os.environ.get("LAYA_COMPILE_PACKED", "0") == "1") \
             if compile_packed is None else bool(compile_packed)
-        self._forward_packed_fn = (mx.compile(self.model.forward_packed)
-                                   if self.compiled and self.compile_packed
-                                   else self.model.forward_packed)
+        self._forward_packed_fn: Callable[..., tuple[mx.array, mx.array]] = (
+            mx.compile(self.model.forward_packed)
+            if self.compiled and self.compile_packed
+            else self.model.forward_packed)
         # Shape bucketing (LAYA_BUCKET=0 restores exact-shape behaviour) and
         # cold dispatch (LAYA_COLD_DISPATCH=0 restores compile-on-first-call).
         self.bucket = (os.environ.get("LAYA_BUCKET", "1") != "0") if bucket is None else bool(bucket)
         self.cold_dispatch = (os.environ.get("LAYA_COLD_DISPATCH", "1") != "0") \
             if cold_dispatch is None else bool(cold_dispatch)
-        self._seen_shapes = set()  # bucketed shape keys already sent to mx.compile
+        self._seen_shapes: set[tuple[Any, ...]] = set()  # bucketed shape keys already sent to mx.compile
         self.temperature = self.cfg.get("temperature", [1.0, 1.0, 1.0])
         self.temperature_by_options = self.cfg.get("temperature_by_options", {})
         self.dtype = dtype
-        self.last_raw = None  # (option_logits, act_logits) mx arrays from the last forward
+        self.last_raw: tuple[mx.array, mx.array] | None = None  # (option_logits, act_logits) mx arrays from the last forward
         if warmup:
             self.warmup()
 
-    def warmup(self, l_buckets=None, k_buckets=None, t_buckets=None, batch_size=4):
+    def warmup(self, l_buckets: list[int] | None = None, k_buckets: list[int] | None = None,
+               t_buckets: list[int] | None = None, batch_size: int = 4) -> float:
         """Pre-compile every bucketed shape at load so no live request pays a
         retrace. Off by default; enable via LayaMLX(..., warmup=True).
 
@@ -273,6 +395,7 @@ class LayaMLX:
         """
         import time as _time
         import mlx.core as mx
+        from laya_mlx import Pack
         max_len = int(self.cfg["max_len"])
         if l_buckets is None:
             l_buckets = list(range(_L_BUCKET, max_len + 1, _L_BUCKET))
@@ -282,11 +405,11 @@ class LayaMLX:
         pad_id = self.tok.pad_token_id
         for L in l_buckets:
             for K in k_buckets:
-                b = {"input_ids": np.full((1, L), pad_id, dtype=np.int64),
-                     "attention_mask": np.ones((1, L), dtype=np.int64),
-                     "marker_pos": np.zeros((1, K), dtype=np.int64),
-                     "marker_mask": np.ones((1, K), dtype=bool),
-                     "qtype": np.zeros(1, dtype=np.int64)}
+                b: Batch = {"input_ids": np.full((1, L), pad_id, dtype=np.int64),
+                            "attention_mask": np.ones((1, L), dtype=np.int64),
+                            "marker_pos": np.zeros((1, K), dtype=np.int64),
+                            "marker_mask": np.ones((1, K), dtype=bool),
+                            "qtype": np.zeros(1, dtype=np.int64)}
                 logits, act = self._forward_fn(
                     mx.array(b["input_ids"]), mx.array(b["attention_mask"]),
                     mx.array(b["marker_pos"]), mx.array(b["marker_mask"]),
@@ -316,19 +439,20 @@ class LayaMLX:
                         mx.array(b["input_ids"]), mx.array(b["attention_mask"]),
                         mx.array(b["marker_pos"]), mx.array(b["marker_mask"]),
                         mx.array(b["qtype"]),
-                        {k: mx.array(v) for k, v in pack.items()})
+                        cast(Pack, {k: mx.array(cast(Any, v)) for k, v in pack.items()}))
                     mx.eval(logits, act)
                     self._seen_shapes.add(("pack", B, L, int(pack["flat_idx"].shape[0]),
                                            _K_BUCKET))
         return _time.perf_counter() - t0
 
-    def prepare(self, state, questions):
+    def prepare(self, state: Any, questions: Questions) -> tuple[list[str], list[Item], Batch]:
         """Tokenize + collate a Jev request into the model's numpy batch (no inference).
 
         The shared state is serialized+tokenized once and reused for every
         question (state_ids is sliced per question inside build_sequence).
         """
-        ids, items = list(questions.keys()), []
+        ids: list[str] = list(questions.keys())
+        items: list[Item] = []
         state_ids = self.tok(serialize_state(state).replace(self.tok.mask_token, " "),
                              add_special_tokens=False)["input_ids"]
         for qid in ids:
@@ -341,9 +465,10 @@ class LayaMLX:
             items.append({"ids": seq, "markers": markers, "qtype": QTYPES[q["t"]], "q": q})
         return ids, items, collate_items(items, self.tok.pad_token_id)
 
-    def raw_forward(self, batch):
+    def raw_forward(self, batch: Batch) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
         """Run the MLX model on a prepared batch; returns (option_logits, act_logits) numpy arrays."""
         import mlx.core as mx
+        from laya_mlx import Pack
         pack = _pack_maps(batch) if self.unpad else None
         k_orig = batch["marker_pos"].shape[1]
         if self.bucket:
@@ -356,8 +481,8 @@ class LayaMLX:
                 if pack is not None and self.compile_packed:
                     pack = _bucket_pack(pack)
         if pack is not None:
-            key = ("pack", batch["input_ids"].shape[0], batch["input_ids"].shape[1],
-                   int(pack["flat_idx"].shape[0]), batch["marker_pos"].shape[1])
+            key: tuple[Any, ...] = ("pack", batch["input_ids"].shape[0], batch["input_ids"].shape[1],
+                                    int(pack["flat_idx"].shape[0]), batch["marker_pos"].shape[1])
             fn = self._forward_packed_fn
             if self.cold_dispatch and self.compiled and self.compile_packed \
                     and key not in self._seen_shapes:
@@ -367,7 +492,7 @@ class LayaMLX:
                 mx.array(batch["input_ids"]), mx.array(batch["attention_mask"]),
                 mx.array(batch["marker_pos"]), mx.array(batch["marker_mask"]),
                 mx.array(batch["qtype"]),
-                {k: mx.array(v) for k, v in pack.items()})
+                cast(Pack, {k: mx.array(cast(Any, v)) for k, v in pack.items()}))
         else:
             key = ("pad", batch["input_ids"].shape[0], batch["input_ids"].shape[1],
                    batch["marker_pos"].shape[1])
@@ -385,12 +510,13 @@ class LayaMLX:
         return np.asarray(logits, dtype=np.float32), np.asarray(act, dtype=np.float32)
 
 
-    def system_one(self, state, questions):
+    def system_one(self, state: Any, questions: Questions) -> SystemOneResult:
         """questions: {id: {"type": "choice"|"score"|"noul", "instructions": ..., "criteria": ...}} (Jev request shape)."""
         ids, items, b = self.prepare(state, questions)
         logits, act = self.raw_forward(b)
         act = _softmax(act, -1)
-        answers, n_tokens = {}, b["n_tokens"]
+        answers: dict[str, Answer] = {}
+        n_tokens = b["n_tokens"]
         for r, qid in enumerate(ids):
             q = items[r]["q"]
             k = len(items[r]["markers"])
@@ -398,7 +524,7 @@ class LayaMLX:
             z = logits[r, :k] / self.temperature_by_options.get(temp_bucket(qt, k), self.temperature[qt])
             p = np.exp(z - z.max())
             p = p / p.sum()
-            ext = {"act_probability": float(act[r, 0])}
+            ext: RLAgentExt = {"act_probability": float(act[r, 0])}
             if q["t"] == "choice":
                 keys = list(q["crit"].keys())
                 answers[qid] = {"type": "choice", "choice": keys[int(p.argmax())],
@@ -416,14 +542,14 @@ class LayaMLX:
     predict = system_one
 
 
-def _pack_maps(batch):
+def _pack_maps(batch: Batch) -> PackMaps | None:
     """Index maps for the unpadded (varlen) forward, or None when not eligible.
 
     Eligible: B > 1 and the batch actually has padding (T < B*L). All arrays are
     int32 numpy; laya_mlx.Model.forward_packed documents their semantics.
     """
     att = np.asarray(batch["attention_mask"])
-    B, L = att.shape
+    B, L = cast(tuple[int, int], att.shape)
     if B <= 1:
         return None
     flat = att.reshape(-1)
@@ -441,14 +567,14 @@ def _pack_maps(batch):
             "cls_idx": cls_idx, "marker_idx": marker_idx}
 
 
-def _softmax(x, axis):
+def _softmax(x: npt.NDArray[np.float32], axis: int) -> npt.NDArray[np.float32]:
     x = x - x.max(axis=axis, keepdims=True)
     e = np.exp(x)
-    return e / e.sum(axis=axis, keepdims=True)
+    return cast(npt.NDArray[np.float32], e / e.sum(axis=axis, keepdims=True))
 
 
 # ----------------------------------------------------------------------------- CLI
-def _main(argv=None):
+def _main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="laya_api.py",
         description="Run the MLX RL Agent (Laya) on one Jev-style request and print the JSON response.",
@@ -480,7 +606,7 @@ def _main(argv=None):
 
     if args.input and args.input != "-":
         with open(args.input) as f:
-            req = json.load(f)
+            req: dict[str, Any] = json.load(f)
     elif args.state is not None and args.questions:
         with open(args.questions) as f:
             req = {"state": args.state, "questions": json.load(f)}
@@ -488,7 +614,7 @@ def _main(argv=None):
         req = json.load(sys.stdin)
     if args.agent == "fast":
         from laya_fast import LayaFast
-        agent = LayaFast(args.model, dtype=args.dtype, compile=not args.no_compile)
+        agent: LayaMLX | LayaFast = LayaFast(args.model, dtype=args.dtype, compile=not args.no_compile)
     else:
         agent = LayaMLX(args.model, dtype=args.dtype, compile=not args.no_compile)
     out = agent.system_one(req["state"], req["questions"])

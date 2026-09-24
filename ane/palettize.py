@@ -9,11 +9,30 @@ import argparse
 import json
 import time
 from pathlib import Path
+from typing import NotRequired, TypedDict
 
 import numpy as np
 
 
-def main():
+class PalettizeTiming(TypedDict):
+    p50_ms: float
+    min_ms: float
+    max_ms: float
+
+
+class PalettizeReport(TypedDict):
+    """report.json payload for one palettized package."""
+
+    package: str
+    bits: int
+    mode: str
+    group_size: int
+    palettize_seconds: float
+    size_mb: float
+    timing: NotRequired[PalettizeTiming]
+
+
+def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--package", type=Path, required=True)
     ap.add_argument("--bits", type=int, default=8)
@@ -45,7 +64,7 @@ def main():
     args.output.mkdir(parents=True)
     target = args.output / "model.mlpackage"
     compressed.save(str(target))
-    report = {"package": str(args.package), "bits": args.bits, "mode": args.mode,
+    report: PalettizeReport = {"package": str(args.package), "bits": args.bits, "mode": args.mode,
               "group_size": args.group_size,
               "palettize_seconds": round(time.perf_counter() - t0, 2),
               "size_mb": round(sum(f.stat().st_size for f in target.rglob("*") if f.is_file()) / 1e6, 1)}
