@@ -1,6 +1,9 @@
 {
  "suite_source": "quality_suite.py",
- "suite_sha256": "877e009f6d24b4d84724b5160a2fb7afd52b57b74b872d6324dda334bc0f5847",
+ "suite_sha256": "56d31837ff1bdea576d3886c4f63f531e26b71068aacd8e3911f68456df30900",
+ "compatible_suite_sha256": {
+  "877e009f6d24b4d84724b5160a2fb7afd52b57b74b872d6324dda334bc0f5847": "Original suite before strict typing annotations; all 105 tasks and benchmark constants are identical. Retained for grading archived results."
+ },
  "checkpoint": "English root as shipped",
  "ground_truth": "Synthetic labels created for this benchmark; not independently human-annotated. Previously used in GLiNER comparison; no Laya-specific tuning.",
  "threshold": 0.5,
