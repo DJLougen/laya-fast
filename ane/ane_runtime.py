@@ -17,9 +17,12 @@ import math
 import os
 import sys
 import time
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any, TypedDict, cast
 
 import numpy as np
+import numpy.typing as npt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -30,7 +33,25 @@ MAX_MARKERS = 32
 MASK_NEG = -1e4
 
 
-def _package_fingerprint(pkg):
+class ANEInputs(TypedDict):
+    """Fixed-shape fp16 inputs for one bucketed Core ML call."""
+
+    embeddings: npt.NDArray[np.float16]
+    full_mask: npt.NDArray[np.float16]
+    local_mask: npt.NDArray[np.float16]
+    type_vectors: npt.NDArray[np.float16]
+    marker_map: npt.NDArray[np.float16]
+
+
+class ForwardItem(TypedDict):
+    """Per-question payload consumed by ``forward_one`` (Item minus ``q``)."""
+
+    ids: list[int]
+    qtype: int
+    markers: list[int]
+
+
+def _package_fingerprint(pkg: Path) -> str:
     """Cheap content fingerprint: model spec hash + file sizes (weight.bin is
     ~700 MB, so we hash the small spec and trust size+name for the rest)."""
     import hashlib
@@ -45,7 +66,7 @@ def _package_fingerprint(pkg):
     return h.hexdigest()
 
 
-def _load_compiled(pkg, units):
+def _load_compiled(pkg: Path, units: Any) -> Any:
     """Load a bucket via a cached .mlmodelc next to the package. Compiles once
     (cold), then loads the compiled bundle directly (warm)."""
     import coremltools as ct
@@ -62,16 +83,18 @@ def _load_compiled(pkg, units):
 
 
 class LayaANE:
-    def __init__(self, model_dir, buckets=None, compute_units="cpu_ne", ane_dir=None):
+    def __init__(self, model_dir: str, buckets: list[int] | None = None,
+                 compute_units: str = "cpu_ne", ane_dir: str | Path | None = None) -> None:
         import coremltools as ct
         from safetensors import safe_open
 
         self.model_dir = Path(model_dir)
-        self.cfg = json.loads((self.model_dir / "rl_agent_config.json").read_text())
-        self.encoder_cfg = json.loads((self.model_dir / "encoder" / "config.json").read_text())
+        self.cfg: dict[str, Any] = json.loads((self.model_dir / "rl_agent_config.json").read_text())
+        self.encoder_cfg: dict[str, Any] = json.loads(
+            (self.model_dir / "encoder" / "config.json").read_text())
         self.tok = laya_api._Tokenizer(str(self.model_dir / "tokenizer"))
-        self.temperature = self.cfg.get("temperature", [1.0, 1.0, 1.0])
-        self.temperature_by_options = self.cfg.get("temperature_by_options", {})
+        self.temperature: Any = self.cfg.get("temperature", [1.0, 1.0, 1.0])
+        self.temperature_by_options: Any = self.cfg.get("temperature_by_options", {})
         self.width = int(self.encoder_cfg["hidden_size"])
         self.window = int(self.encoder_cfg.get("local_attention", 128)) // 2
 
@@ -90,7 +113,7 @@ class LayaANE:
             })
         if not buckets:
             raise ValueError("no exported buckets found under %s" % ane_dir)
-        self.models = {}
+        self.models: dict[int, Any] = {}
         for L in buckets:
             pkg = ane_dir / ("body%d" % L) / "model.mlpackage"
             if not pkg.exists() and not (pkg.parent / "model.mlmodelc").exists():
@@ -100,24 +123,24 @@ class LayaANE:
         self.max_len = self.buckets[-1]
 
         with safe_open(str(self.model_dir / "model.safetensors"), framework="numpy") as w:
-            self.embedding = w.get_tensor("encoder.embeddings.tok_embeddings.weight")
-            self.type_embedding = w.get_tensor("type_emb.weight")
-            self.action = {
+            self.embedding: npt.NDArray[Any] = w.get_tensor("encoder.embeddings.tok_embeddings.weight")
+            self.type_embedding: npt.NDArray[Any] = w.get_tensor("type_emb.weight")
+            self.action: dict[str, npt.NDArray[np.float32]] = {
                 k: w.get_tensor("act_head." + k).astype(np.float32)
                 for k in ("0.weight", "0.bias", "2.weight", "2.bias")
             }
         self._erf = np.frompyfunc(math.erf, 1, 1)
-        self._windows = {}
-        self.last_raw = None
+        self._windows: dict[int, npt.NDArray[np.bool_]] = {}
+        self.last_raw: tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]] | None = None
 
     # ------------------------------------------------------------------ prep
-    def _bucket_for(self, n):
+    def _bucket_for(self, n: int) -> int:
         for L in self.buckets:
             if n <= L:
                 return L
         raise ValueError("sequence length %d exceeds largest ANE bucket %d" % (n, self.max_len))
 
-    def _window_mask(self, L):
+    def _window_mask(self, L: int) -> npt.NDArray[np.bool_]:
         w = self._windows.get(L)
         if w is None:
             pos = np.arange(L)
@@ -125,7 +148,8 @@ class LayaANE:
             self._windows[L] = w
         return w
 
-    def model_inputs(self, ids, valid, qtype, marker_pos, L):
+    def model_inputs(self, ids: Sequence[int] | npt.NDArray[Any], valid: None, qtype: int,
+                     marker_pos: Sequence[int] | npt.NDArray[Any], L: int) -> ANEInputs:
         """Build the fixed-shape fp16 inputs for one question on bucket L."""
         ids_pad = np.zeros(L, dtype=np.int64)
         ids_pad[: len(ids)] = ids
@@ -146,7 +170,7 @@ class LayaANE:
             "marker_map": marker_map,
         }
 
-    def forward_one(self, item):
+    def forward_one(self, item: ForwardItem) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
         """Run one prepared item; returns (option_logits[K], act_logits[2]) fp32."""
         n = len(item["ids"])
         L = self._bucket_for(n)
@@ -169,16 +193,16 @@ class LayaANE:
         return logits[:k], act
 
     # ------------------------------------------------------------------ API
-    def prepare(self, state, questions):
-        return laya_api.LayaMLX.prepare(self, state, questions)
+    def prepare(self, state: Any, questions: laya_api.Questions) -> tuple[list[str], list[laya_api.Item], laya_api.Batch]:
+        return laya_api.LayaMLX.prepare(cast(laya_api.LayaMLX, self), state, questions)
 
-    def raw_forward(self, batch):
+    def raw_forward(self, batch: laya_api.Batch) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
         """Sequential per-question forward; returns (logits [B,K], act [B,2])."""
         raise NotImplementedError("use system_one; per-question buckets differ")
 
-    def system_one(self, state, questions):
+    def system_one(self, state: Any, questions: laya_api.Questions) -> laya_api.SystemOneResult:
         ids, items, b = self.prepare(state, questions)
-        answers = {}
+        answers: dict[str, laya_api.Answer] = {}
         kmax = b["marker_pos"].shape[1]
         raw_logits = np.full((len(ids), kmax), MASK_NEG, np.float32)
         raw_act = np.zeros((len(ids), 2), np.float32)
@@ -194,7 +218,7 @@ class LayaANE:
             z = logits / self.temperature_by_options.get(temp_bucket(qt, k), self.temperature[qt])
             p = np.exp(z - z.max())
             p = p / p.sum()
-            ext = {"act_probability": act_p}
+            ext: laya_api.RLAgentExt = {"act_probability": act_p}
             if q["t"] == "choice":
                 keys = list(q["crit"].keys())
                 answers[qid] = {"type": "choice", "choice": keys[int(p.argmax())],

@@ -7,8 +7,8 @@ Run: .venv/bin/python examples/voice/voice_eval.py
 import json
 import urllib.parse
 import urllib.request
-
-CASES = [
+from typing import Any, cast
+CASES: list[tuple[str, str, str | None]] = [
     ("Open Safari.", "open_app", "Safari"),
     ("Launch Slack.", "open_app", "Slack"),
     ("Switch to Visual Studio Code.", "open_app", "Visual Studio Code"),
@@ -44,7 +44,7 @@ CASES = [
 # Written AFTER the descriptions/threshold were tuned on CASES; never used for tuning the
 # model-side choice. NOTE: the argument-strip regexes WERE adjusted after seeing these
 # (Finder/Chrome/passport), so the argument score here is not held-out.
-HELDOUT = [
+HELDOUT: list[tuple[str, str, str | None]] = [
     ("Open Messages.", "open_app", "Messages"),
     ("Can you launch Finder.", "open_app", "Finder"),
     ("Go to Terminal.", "open_app", "Terminal"),
@@ -76,15 +76,15 @@ HELDOUT = [
     ("Hmm, let me think.", "none", None),
     ("Thanks.", "none", None),
 ]
-def post(text):
+def post(text: str) -> dict[str, Any]:
     data = urllib.parse.urlencode({"text": text, "dry": "1"}).encode()
     with urllib.request.urlopen("http://127.0.0.1:8765/voice", data, timeout=30) as r:
-        return json.loads(r.read())
+        return cast(dict[str, Any], json.loads(r.read()))
 
 
-def evaluate(cases, label):
+def evaluate(cases: list[tuple[str, str, str | None]], label: str) -> None:
     ok = arg_ok = arg_n = 0
-    ms = []
+    ms: list[float] = []
     print("\n== %s (%d cases)" % (label, len(cases)))
     for text, want, want_arg in cases:
         r = post(text)

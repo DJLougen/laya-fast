@@ -8,7 +8,7 @@ In scope: the MLX encoder and Metal kernels (`laya_mlx.py`), the ANE export/runt
 
 ## The gate
 
-`bash verify.sh` is the fail-closed gate. It runs the decision-parity check first, then times the deterministic fixtures. If parity fails, the run exits non-zero and no timing is reported — a faster wrong answer does not count.
+`bash verify.sh` is the fail-closed gate. It runs the strict-typing check (every tracked `.py` file must pass `mypy --strict`; CI enforces this on every PR, so untyped code cannot land), then the decision-parity check, then times the deterministic fixtures. If parity fails, the run exits non-zero and no timing is reported — a faster wrong answer does not count.
 
 - Run it before and after your change, on the same machine and config.
 - `LAYA_MODEL`, `LAYA_BENCH_DTYPE`, and `LAYA_AGENT` (`fast` router vs `mlx` GPU-only) select the configuration under test. Report which you used.
@@ -29,6 +29,14 @@ In scope: the MLX encoder and Metal kernels (`laya_mlx.py`), the ANE export/runt
 - Anything with local absolute paths, tokens, or credentials.
 
 `.gitignore` already covers these; if a generated artifact slips past it, fix the ignore rather than committing the file.
+
+## Strict typing
+
+All Python must pass `mypy --strict`. The gate command is:
+
+    git ls-files -z '*.py' | xargs -0 mypy
+
+Config lives in `pyproject.toml` (`[tool.mypy]`); CI runs it as the `typecheck` / `mypy` check on every push and PR, and PRs that add untyped code are rejected. Annotate every function (parameters and returns, including `-> None` and `__init__`); use `# type: ignore[<code>]  # reason: ...` only with a specific error code and a reason — bare ignores do not pass.
 
 ## Setup
 

@@ -28,35 +28,68 @@ Parity notes vs. the PyTorch original:
 """
 import json
 import os
+from collections.abc import Callable
+from typing import Any, Protocol, TypedDict, cast
 
 import mlx.core as mx
-import mlx.nn as nn
+from mlx.nn.layers.activations import GELU
+from mlx.nn.layers.base import Module
+from mlx.nn.layers.embedding import Embedding
+from mlx.nn.layers.linear import Linear
+from mlx.nn.layers.normalization import LayerNorm
 
-QTYPES = {"choice": 0, "score": 1, "noul": 2}
-QTYPE_NAMES = {v: k for k, v in QTYPES.items()}
+QTYPES: dict[str, int] = {"choice": 0, "score": 1, "noul": 2}
+QTYPE_NAMES: dict[int, str] = {v: k for k, v in QTYPES.items()}
 
-_DTYPES = {"float32": mx.float32, "float16": mx.float16, "bfloat16": mx.bfloat16}
+_DTYPES: dict[str, mx.Dtype] = {"float32": mx.float32, "float16": mx.float16, "bfloat16": mx.bfloat16}
 
 
-def _activation(name):
+class _MetalKernel(Protocol):
+    """Callable returned by ``mx.fast.metal_kernel`` (stubbed as ``object``)."""
+
+    def __call__(
+        self,
+        *,
+        inputs: list[mx.array],
+        template: list[tuple[str, Any]],
+        grid: tuple[int, int, int],
+        threadgroup: tuple[int, int, int],
+        output_shapes: list[tuple[int, ...]],
+        output_dtypes: list[mx.Dtype],
+    ) -> list[mx.array]: ...
+
+
+class Pack(TypedDict):
+    """Packed-batch index maps (mx.array values) consumed by ``forward_packed``."""
+
+    flat_idx: mx.array
+    slot_src: mx.array
+    seq_of: mx.array
+    cls_idx: mx.array
+    marker_idx: mx.array
+
+
+def _activation(name: str) -> Callable[[mx.array], mx.array]:
     """ACT2FN equivalent for the activations this architecture can use."""
     if name == "gelu":
-        return nn.GELU()  # exact erf GELU, matches ACT2FN["gelu"] and nn.GELU default
+        return GELU()  # type: ignore[no-untyped-call]  # reason: mlx GELU.__init__ is untyped; exact erf GELU, matches ACT2FN["gelu"] and nn.GELU default
     if name == "relu":
         return lambda x: mx.maximum(x, 0)
     raise ValueError("unsupported activation %r (expected 'gelu' or 'relu')" % name)
 
 
 # ----------------------------------------------------------------------------- encoder
-class Embeddings(nn.Module):
+class Embeddings(Module):
     """ModernBertEmbeddings: token embedding -> LayerNorm (no positional embedding)."""
 
-    def __init__(self, cfg):
-        super().__init__()
-        self.tok_embeddings = nn.Embedding(cfg["vocab_size"], cfg["hidden_size"])
-        self.norm = nn.LayerNorm(cfg["hidden_size"], eps=cfg["norm_eps"], bias=cfg["norm_bias"])
+    def __init__(self, cfg: dict[str, Any]) -> None:
+        super().__init__()  # type: ignore[no-untyped-call]  # reason: mlx Module.__init__ is untyped
+        self.tok_embeddings: Callable[[mx.array], mx.array] = Embedding(
+            cfg["vocab_size"], cfg["hidden_size"])
+        self.norm: Callable[[mx.array], mx.array] = LayerNorm(
+            cfg["hidden_size"], eps=cfg["norm_eps"], bias=cfg["norm_bias"])
 
-    def __call__(self, input_ids):
+    def __call__(self, input_ids: mx.array) -> mx.array:
         return self.norm(self.tok_embeddings(input_ids))
 
 
@@ -240,23 +273,25 @@ _QKV_ROPE_SOURCE_SHAPED = """
     v_out[out_idx] = T(v_val);
 """
 
+_fused_qkv_rope_kernel: _MetalKernel | None
+_fused_geglu_kernel: _MetalKernel | None
 if _METAL_AVAILABLE:
-    _fused_qkv_rope_kernel = mx.fast.metal_kernel(
+    _fused_qkv_rope_kernel = cast(_MetalKernel, mx.fast.metal_kernel(
         name="fused_qkv_rope",
         input_names=["qkv", "cos", "sin"],
         output_names=["q_out", "k_out", "v_out"],
         header=_METAL_HEADER,
         source=_QKV_ROPE_SOURCE_SHAPED if _SHAPE_TEMPLATES else _QKV_ROPE_SOURCE,
         compile_options={"math_mode": "fast"},
-    )
-    _fused_geglu_kernel = mx.fast.metal_kernel(
+    ))
+    _fused_geglu_kernel = cast(_MetalKernel, mx.fast.metal_kernel(
         name="fused_geglu",
         input_names=["x"],
         output_names=["out"],
         header=_METAL_HEADER,
         source=_GEGLU_SOURCE,
         compile_options={"math_mode": "fast"},
-    )
+    ))
 else:
     _fused_qkv_rope_kernel = None
     _fused_geglu_kernel = None
@@ -330,14 +365,15 @@ _SKINNY_MMA_SOURCE = """
     }
 """
 
+_skinny_mma_kernel: _MetalKernel | None
 if _METAL_AVAILABLE:
-    _skinny_mma_kernel = mx.fast.metal_kernel(
+    _skinny_mma_kernel = cast(_MetalKernel, mx.fast.metal_kernel(
         name="skinny_gemm_mma_tg",
         input_names=["xp", "Wt"],
         output_names=["yp"],
         header=_SKINNY_MMA_HEADER,
         source=_SKINNY_MMA_SOURCE,
-    )
+    ))
 else:
     _skinny_mma_kernel = None
 
@@ -348,11 +384,11 @@ _SKINNY_KT = 64
 _SKINNY_SGS = 8
 _SKINNY_NCOLS = (_SKINNY_SGS // _SKINNY_MTG) * _SKINNY_NT * 8  # 128
 
-# id(nn.Linear) -> pre-transposed Wt[K,N], populated lazily.
-_skinny_wt_cache = {}
+# id(Linear) -> pre-transposed Wt[K,N], populated lazily.
+_skinny_wt_cache: dict[int, mx.array] = {}
 
 
-def _skinny_linear(lin, x):
+def _skinny_linear(lin: Linear, x: mx.array) -> mx.array | None:
     """x[...,K] @ lin.weight[N,K]^T via the skinny-M MMA kernel.
 
     Returns None when the shape/dtype is not eligible (caller falls back to
@@ -361,7 +397,7 @@ def _skinny_linear(lin, x):
     if _skinny_mma_kernel is None or x.dtype != mx.float16:
         return None
     W = lin.weight
-    N, K = W.shape
+    N, K = cast(tuple[int, int], W.shape)
     M = x.size // K
     if M > 128 or N < 2048 or N % _SKINNY_NCOLS or K % _SKINNY_KT:
         return None
@@ -388,7 +424,7 @@ def _skinny_linear(lin, x):
         output_dtypes=[x.dtype],
     )[0]
     y = yp[:M].reshape(*x.shape[:-1], N)
-    bias = getattr(lin, "bias", None)
+    bias = cast(mx.array | None, getattr(lin, "bias", None))
     if bias is not None:
         y = y + bias
     return y
@@ -399,13 +435,14 @@ def _skinny_linear(lin, x):
 # reads each weight once for all rows. Bit-identical outputs, no extra memory
 # (scatter mode). Read at trace time; LAYA_TALL_GEMM=0 disables.
 _TALL_GEMM = os.environ.get("LAYA_TALL_GEMM", "1") != "0"
+_tall_linear: Callable[[Linear, mx.array], mx.array | None] | None
 try:
     from tall_gemm import tall_linear as _tall_linear
 except Exception:  # Metal/kernel unavailable -> MLX matmul only
     _tall_linear = None
 
 
-def _linear(lin, x):
+def _linear(lin: Linear, x: mx.array) -> mx.array:
     """nn.Linear with optional custom fast paths (tall GEMM default on,
     LAYA_SKINNY_GEMM=1 legacy kernel off)."""
     if _TALL_GEMM and _tall_linear is not None:
@@ -419,18 +456,18 @@ def _linear(lin, x):
     return lin(x)
 
 
-class MLP(nn.Module):
+class MLP(Module):
     """ModernBertMLP: Wi -> split(input, gate) -> act(input) * gate -> Wo (GLU)."""
 
-    def __init__(self, cfg):
-        super().__init__()
-        self.Wi = nn.Linear(cfg["hidden_size"], 2 * cfg["intermediate_size"], bias=cfg["mlp_bias"])
-        self.act_name = cfg["hidden_activation"]
+    def __init__(self, cfg: dict[str, Any]) -> None:
+        super().__init__()  # type: ignore[no-untyped-call]  # reason: mlx Module.__init__ is untyped
+        self.Wi = Linear(cfg["hidden_size"], 2 * cfg["intermediate_size"], bias=cfg["mlp_bias"])
+        self.act_name: str = cfg["hidden_activation"]
         self.act = _activation(self.act_name)
-        self.intermediate_size = cfg["intermediate_size"]
-        self.Wo = nn.Linear(cfg["intermediate_size"], cfg["hidden_size"], bias=cfg["mlp_bias"])
+        self.intermediate_size: int = cfg["intermediate_size"]
+        self.Wo = Linear(cfg["intermediate_size"], cfg["hidden_size"], bias=cfg["mlp_bias"])
 
-    def __call__(self, x):
+    def __call__(self, x: mx.array) -> mx.array:
         wi = _linear(self.Wi, x)
         if _fused_geglu_kernel is not None and self.act_name == "gelu":
             total_elements = wi.size // 2
@@ -443,12 +480,12 @@ class MLP(nn.Module):
                 output_dtypes=[wi.dtype],
             )[0]
         else:
-            inp, gate = mx.split(wi, 2, axis=-1)
+            inp, gate = cast(tuple[mx.array, mx.array], mx.split(wi, 2, axis=-1))
             act = self.act(inp) * gate
         return _linear(self.Wo, act)
 
 
-class RotaryEmbedding(nn.Module):
+class RotaryEmbedding(Module):
     """Per-layer-type RoPE (HF ModernBertRotaryEmbedding, rope_type='default').
 
     cos/sin are computed in float32 then cast to the model dtype, as in HF.
@@ -456,13 +493,13 @@ class RotaryEmbedding(nn.Module):
     are not registered as parameters/buffers).
     """
 
-    def __init__(self, cfg):
-        super().__init__()
+    def __init__(self, cfg: dict[str, Any]) -> None:
+        super().__init__()  # type: ignore[no-untyped-call]  # reason: mlx Module.__init__ is untyped
         self.head_dim = cfg["hidden_size"] // cfg["num_attention_heads"]
-        self.thetas = {lt: float(cfg["rope_parameters"][lt]["rope_theta"])
-                       for lt in set(cfg["layer_types"])}
+        self.thetas: dict[str, float] = {lt: float(cfg["rope_parameters"][lt]["rope_theta"])
+                                       for lt in set(cfg["layer_types"])}
 
-    def __call__(self, seq_len, layer_type, dtype):
+    def __call__(self, seq_len: int, layer_type: str, dtype: mx.Dtype) -> tuple[mx.array, mx.array]:
         inv_freq = 1.0 / (self.thetas[layer_type]
                           ** (mx.arange(0, self.head_dim, 2).astype(mx.float32) / self.head_dim))
         freqs = mx.arange(seq_len).astype(mx.float32)[:, None] * inv_freq[None, :]  # [L, D/2]
@@ -470,7 +507,7 @@ class RotaryEmbedding(nn.Module):
         return mx.cos(emb).astype(dtype), mx.sin(emb).astype(dtype)
 
 
-def _apply_rope(x, cos, sin):
+def _apply_rope(x: mx.array, cos: mx.array, sin: mx.array) -> mx.array:
     """HF apply_rotary_pos_emb on [B, L, H, D] layouts: rotate_half, fp32 math."""
     xf = x.astype(mx.float32)
     cos = cos.astype(x.dtype).astype(mx.float32)[None, :, None, :]
@@ -480,33 +517,33 @@ def _apply_rope(x, cos, sin):
     return (xf * cos + rot * sin).astype(x.dtype)
 
 
-class Attention(nn.Module):
+class Attention(Module):
     """ModernBertAttention: packed Wqkv -> RoPE -> SDPA -> Wo (no biases in this config)."""
 
-    def __init__(self, cfg):
-        super().__init__()
-        self.num_heads = cfg["num_attention_heads"]
+    def __init__(self, cfg: dict[str, Any]) -> None:
+        super().__init__()  # type: ignore[no-untyped-call]  # reason: mlx Module.__init__ is untyped
+        self.num_heads: int = cfg["num_attention_heads"]
         self.head_dim = cfg["hidden_size"] // self.num_heads
         self.scale = self.head_dim ** -0.5
         d = cfg["hidden_size"]
-        self.Wqkv = nn.Linear(d, 3 * d, bias=cfg["attention_bias"])
-        self.Wo = nn.Linear(d, d, bias=cfg["attention_bias"])
+        self.Wqkv = Linear(d, 3 * d, bias=cfg["attention_bias"])
+        self.Wo = Linear(d, d, bias=cfg["attention_bias"])
 
-    def _sdpa(self, qkv, cos, sin, mask):
+    def _sdpa(self, qkv: mx.array, cos: mx.array, sin: mx.array, mask: mx.array) -> mx.array:
         """qkv [B, L, 3, H, Dh] -> attention out [B, L, H*Dh] (RoPE + SDPA)."""
         B, L = qkv.shape[0], qkv.shape[1]
         if _fused_qkv_rope_kernel is not None:
-            template = [("T", qkv.dtype), ("NUM_HEADS", self.num_heads), ("HEAD_DIM", self.head_dim)]
+            template: list[tuple[str, Any]] = [("T", qkv.dtype), ("NUM_HEADS", self.num_heads), ("HEAD_DIM", self.head_dim)]
             if _SHAPE_TEMPLATES:
                 template += [("BATCH_SIZE", B), ("SEQ_LEN", L)]
-            q, k, v = _fused_qkv_rope_kernel(
+            q, k, v = cast(tuple[mx.array, mx.array, mx.array], _fused_qkv_rope_kernel(
                 inputs=[qkv, cos, sin],
                 template=template,
                 grid=(self.head_dim, L, B * self.num_heads),
                 threadgroup=(min(self.head_dim, 32), min(L, 8), 1),
                 output_shapes=[(B, self.num_heads, L, self.head_dim), (B, self.num_heads, L, self.head_dim), (B, self.num_heads, L, self.head_dim)],
                 output_dtypes=[qkv.dtype, qkv.dtype, qkv.dtype],
-            )
+            ))
         else:
             q = _apply_rope(qkv[:, :, 0], cos, sin).transpose(0, 2, 1, 3)
             k = _apply_rope(qkv[:, :, 1], cos, sin).transpose(0, 2, 1, 3)
@@ -514,12 +551,12 @@ class Attention(nn.Module):
         o = mx.fast.scaled_dot_product_attention(q, k, v, scale=self.scale, mask=mask)
         return o.transpose(0, 2, 1, 3).reshape(B, L, -1)
 
-    def __call__(self, x, cos, sin, mask):
+    def __call__(self, x: mx.array, cos: mx.array, sin: mx.array, mask: mx.array) -> mx.array:
         B, L, _ = x.shape
         qkv = _linear(self.Wqkv, x).reshape(B, L, 3, self.num_heads, self.head_dim)
         return _linear(self.Wo, self._sdpa(qkv, cos, sin, mask))
 
-    def forward_packed(self, x, cos, sin, mask, pack):
+    def forward_packed(self, x: mx.array, cos: mx.array, sin: mx.array, mask: mx.array, pack: Pack) -> mx.array:
         """x [T, D] packed rows -> [T, D]. QKV runs packed; RoPE/SDPA run on the
         padded [B, L] layout via slot_src (pad slots alias row 0, masked and
         discarded) so per-sequence positions and masks are unchanged."""
@@ -530,46 +567,48 @@ class Attention(nn.Module):
         return _linear(self.Wo, o.reshape(B * L, -1)[pack["flat_idx"]])
 
 
-class EncoderLayer(nn.Module):
+class EncoderLayer(Module):
     """ModernBertEncoderLayer: pre-norm attention + GLU MLP. Layer 0 skips attn_norm."""
 
-    def __init__(self, cfg, layer_idx):
-        super().__init__()
-        self.attn_norm = None if layer_idx == 0 else nn.LayerNorm(
+    def __init__(self, cfg: dict[str, Any], layer_idx: int) -> None:
+        super().__init__()  # type: ignore[no-untyped-call]  # reason: mlx Module.__init__ is untyped
+        self.attn_norm: Callable[[mx.array], mx.array] | None = None if layer_idx == 0 else LayerNorm(
             cfg["hidden_size"], eps=cfg["norm_eps"], bias=cfg["norm_bias"])
         self.attn = Attention(cfg)
-        self.mlp_norm = nn.LayerNorm(cfg["hidden_size"], eps=cfg["norm_eps"], bias=cfg["norm_bias"])
+        self.mlp_norm: Callable[[mx.array], mx.array] = LayerNorm(
+            cfg["hidden_size"], eps=cfg["norm_eps"], bias=cfg["norm_bias"])
         self.mlp = MLP(cfg)
-        self.attention_type = cfg["layer_types"][layer_idx]
+        self.attention_type: str = cfg["layer_types"][layer_idx]
 
-    def __call__(self, x, cos, sin, mask):
+    def __call__(self, x: mx.array, cos: mx.array, sin: mx.array, mask: mx.array) -> mx.array:
         n = x if self.attn_norm is None else self.attn_norm(x)
         x = x + self.attn(n, cos, sin, mask)
         x = x + self.mlp(self.mlp_norm(x))
         return x
 
-    def forward_packed(self, x, cos, sin, mask, pack):
+    def forward_packed(self, x: mx.array, cos: mx.array, sin: mx.array, mask: mx.array, pack: Pack) -> mx.array:
         n = x if self.attn_norm is None else self.attn_norm(x)
         x = x + self.attn.forward_packed(n, cos, sin, mask, pack)
         x = x + self.mlp(self.mlp_norm(x))
         return x
 
 
-class ModernBertEncoder(nn.Module):
+class ModernBertEncoder(Module):
     """ModernBertModel: embeddings -> N encoder layers -> final_norm."""
 
-    def __init__(self, cfg):
-        super().__init__()
+    def __init__(self, cfg: dict[str, Any]) -> None:
+        super().__init__()  # type: ignore[no-untyped-call]  # reason: mlx Module.__init__ is untyped
         self.embeddings = Embeddings(cfg)
         self.layers = [EncoderLayer(cfg, i) for i in range(cfg["num_hidden_layers"])]
-        self.final_norm = nn.LayerNorm(cfg["hidden_size"], eps=cfg["norm_eps"], bias=cfg["norm_bias"])
+        self.final_norm: Callable[[mx.array], mx.array] = LayerNorm(
+            cfg["hidden_size"], eps=cfg["norm_eps"], bias=cfg["norm_bias"])
         self.rotary_emb = RotaryEmbedding(cfg)
         # HF: config.sliding_window = local_attention // 2 (half-window, inclusive)
         self.sliding_window = cfg["local_attention"] // 2
-        self.layer_types = cfg["layer_types"]
-        self._window_cache = {}
+        self.layer_types: list[str] = cfg["layer_types"]
+        self._window_cache: dict[int, mx.array] = {}
 
-    def __call__(self, input_ids, attention_mask):
+    def __call__(self, input_ids: mx.array, attention_mask: mx.array) -> mx.array:
         L = input_ids.shape[1]
         x = self.embeddings(input_ids)
         # Bool masks, True = attend (same convention as torch SDPA attn_mask).
@@ -578,21 +617,21 @@ class ModernBertEncoder(nn.Module):
             pos = mx.arange(L)
             self._window_cache[L] = (mx.abs(pos[:, None] - pos[None, :]) <= self.sliding_window)[None, None]
         window = self._window_cache[L]
-        masks = {"full_attention": key_mask,
-                 "sliding_attention": key_mask & window}
-        ropes = {lt: self.rotary_emb(L, lt, x.dtype) for lt in set(self.layer_types)}
+        masks: dict[str, mx.array] = {"full_attention": key_mask,
+                                    "sliding_attention": key_mask & window}
+        ropes: dict[str, tuple[mx.array, mx.array]] = {lt: self.rotary_emb(L, lt, x.dtype) for lt in set(self.layer_types)}
         for layer in self.layers:
             cos, sin = ropes[layer.attention_type]
             x = layer(x, cos, sin, masks[layer.attention_type])
         return self.final_norm(x)
 
-    def forward_packed(self, input_ids, attention_mask, pack):
+    def forward_packed(self, input_ids: mx.array, attention_mask: mx.array, pack: Pack) -> mx.array:
         """Unpadded forward: input_ids [T] (real tokens only) -> hidden [T, D].
 
         Every token-wise op runs on T rows. Attention still uses the padded
         [B, L] masks/window and per-sequence RoPE positions via pack["slot_src"].
         """
-        B, L = attention_mask.shape
+        B, L = cast(tuple[int, int], attention_mask.shape)
         x = self.embeddings(input_ids)                                # [T, D]
         key_mask = attention_mask.astype(mx.bool_)[:, None, None, :]  # [B,1,1,L]
         if L not in self._window_cache:
@@ -609,23 +648,23 @@ class ModernBertEncoder(nn.Module):
 
 
 # ----------------------------------------------------------------------------- decision head
-class HeadSelfAttention(nn.Module):
+class HeadSelfAttention(Module):
     """torch.nn.MultiheadAttention(batch_first=True) equivalent.
 
     in_proj packs [q; k; v] along dim 0 exactly like torch's in_proj_weight,
     so the original checkpoint maps 1:1.
     """
 
-    def __init__(self, d, nhead):
-        super().__init__()
+    def __init__(self, d: int, nhead: int) -> None:
+        super().__init__()  # type: ignore[no-untyped-call]  # reason: mlx Module.__init__ is untyped
         self.num_heads = nhead
         self.head_dim = d // nhead
         self.scale = self.head_dim ** -0.5
         self.in_proj_weight = mx.zeros((3 * d, d))
         self.in_proj_bias = mx.zeros((3 * d,))
-        self.out_proj = nn.Linear(d, d)
+        self.out_proj = Linear(d, d)
 
-    def _sdpa(self, qkv, key_mask):
+    def _sdpa(self, qkv: mx.array, key_mask: mx.array) -> mx.array:
         """qkv [B, L, 3, H, Dh] -> attention out [B, L, D] (no RoPE in the head)."""
         B, L = qkv.shape[0], qkv.shape[1]
         q = qkv[:, :, 0].transpose(0, 2, 1, 3)
@@ -634,13 +673,13 @@ class HeadSelfAttention(nn.Module):
         o = mx.fast.scaled_dot_product_attention(q, k, v, scale=self.scale, mask=key_mask)
         return o.transpose(0, 2, 1, 3).reshape(B, L, -1)
 
-    def __call__(self, x, key_mask):
+    def __call__(self, x: mx.array, key_mask: mx.array) -> mx.array:
         B, L, D = x.shape
         qkv = (x @ self.in_proj_weight.T + self.in_proj_bias).reshape(
             B, L, 3, self.num_heads, self.head_dim)
         return _linear(self.out_proj, self._sdpa(qkv, key_mask))
 
-    def forward_packed(self, x, key_mask, pack):
+    def forward_packed(self, x: mx.array, key_mask: mx.array, pack: Pack) -> mx.array:
         """x [T, D] packed rows -> [T, D]; SDPA on the padded layout via slot_src."""
         B, L = key_mask.shape[0], key_mask.shape[-1]
         qkv = x @ self.in_proj_weight.T + self.in_proj_bias           # [T, 3D]
@@ -648,74 +687,76 @@ class HeadSelfAttention(nn.Module):
         o = self._sdpa(qkv5, key_mask)                                # [B, L, D]
         return _linear(self.out_proj, o.reshape(B * L, -1)[pack["flat_idx"]])
 
-class HeadLayer(nn.Module):
+class HeadLayer(Module):
     """torch.nn.TransformerEncoderLayer(norm_first=True, batch_first=True).
 
     FFN activation is ReLU -- the PyTorch default for TransformerEncoderLayer.
     (Only scorer/act_head use GELU; do not "fix" this.)
     """
 
-    def __init__(self, d, nhead, dim_ff):
-        super().__init__()
+    def __init__(self, d: int, nhead: int, dim_ff: int) -> None:
+        super().__init__()  # type: ignore[no-untyped-call]  # reason: mlx Module.__init__ is untyped
         self.self_attn = HeadSelfAttention(d, nhead)
-        self.linear1 = nn.Linear(d, dim_ff)
-        self.linear2 = nn.Linear(dim_ff, d)
-        self.norm1 = nn.LayerNorm(d)
-        self.norm2 = nn.LayerNorm(d)
+        self.linear1 = Linear(d, dim_ff)
+        self.linear2 = Linear(dim_ff, d)
+        self.norm1: Callable[[mx.array], mx.array] = LayerNorm(d)
+        self.norm2: Callable[[mx.array], mx.array] = LayerNorm(d)
 
-    def __call__(self, x, key_mask):
+    def __call__(self, x: mx.array, key_mask: mx.array) -> mx.array:
         x = x + self.self_attn(self.norm1(x), key_mask)
         x = x + _linear(self.linear2, mx.maximum(_linear(self.linear1, self.norm2(x)), 0))
         return x
 
-    def forward_packed(self, x, key_mask, pack):
+    def forward_packed(self, x: mx.array, key_mask: mx.array, pack: Pack) -> mx.array:
         x = x + self.self_attn.forward_packed(self.norm1(x), key_mask, pack)
         x = x + _linear(self.linear2, mx.maximum(_linear(self.linear1, self.norm2(x)), 0))
         return x
 
 
-class TransformerHead(nn.Module):
+class TransformerHead(Module):
     """torch.nn.TransformerEncoder container (enable_nested_tensor=False)."""
 
-    def __init__(self, d, nhead, dim_ff, n_layers):
-        super().__init__()
+    def __init__(self, d: int, nhead: int, dim_ff: int, n_layers: int) -> None:
+        super().__init__()  # type: ignore[no-untyped-call]  # reason: mlx Module.__init__ is untyped
         self.layers = [HeadLayer(d, nhead, dim_ff) for _ in range(n_layers)]
 
-    def __call__(self, x, key_mask):
+    def __call__(self, x: mx.array, key_mask: mx.array) -> mx.array:
         for layer in self.layers:
             x = layer(x, key_mask)
         return x
 
-    def forward_packed(self, x, key_mask, pack):
+    def forward_packed(self, x: mx.array, key_mask: mx.array, pack: Pack) -> mx.array:
         for layer in self.layers:
             x = layer.forward_packed(x, key_mask, pack)
         return x
 
 
 # ----------------------------------------------------------------------------- model
-class Model(nn.Module):
+class Model(Module):
     """MLX twin of rl_common.DecisionModel.
 
     __call__(input_ids, attention_mask, marker_pos, marker_mask, qtype)
         -> (option_logits [B, K] float32, act_logits [B, n_act])
     """
 
-    def __init__(self, encoder_config, agent_config):
-        super().__init__()
+    def __init__(self, encoder_config: dict[str, Any], agent_config: dict[str, Any]) -> None:
+        super().__init__()  # type: ignore[no-untyped-call]  # reason: mlx Module.__init__ is untyped
         self.encoder = ModernBertEncoder(encoder_config)
         d = encoder_config["hidden_size"]
         nhead = max(1, d // 64)
         head_layers = agent_config["head_layers"]
         self.head = TransformerHead(d, nhead, 4 * d, head_layers) if head_layers > 0 else None
-        self.type_emb = nn.Embedding(3, d)
+        self.type_emb: Callable[[mx.array], mx.array] = Embedding(3, d)
         # List attribute -> parameters named scorer.0.* / scorer.3.*, matching the
         # original nn.Sequential(LayerNorm, Linear, GELU, Linear) numbering.
-        self.scorer = [nn.LayerNorm(d), nn.Linear(d, d), nn.GELU(), nn.Linear(d, 1)]
+        self.scorer: list[Callable[[mx.array], mx.array]] = [
+            LayerNorm(d), Linear(d, d), GELU(), Linear(d, 1)]  # type: ignore[no-untyped-call]  # reason: mlx GELU.__init__ is untyped
         n_act = len(agent_config["act_costs"]) + 1
-        self.act_head = [nn.Linear(d + 4, 256), nn.GELU(), nn.Linear(256, n_act)]
+        self.act_head: list[Callable[[mx.array], mx.array]] = [
+            Linear(d + 4, 256), GELU(), Linear(256, n_act)]  # type: ignore[no-untyped-call]  # reason: mlx GELU.__init__ is untyped
         self.temperature = mx.ones((3,))  # buffer in the original; kept float32
 
-    def _score_tail(self, m, pooled, marker_mask):
+    def _score_tail(self, m: mx.array, pooled: mx.array, marker_mask: mx.array) -> tuple[mx.array, mx.array]:
         """Shared tail: marker rows m [B, K, D] + pooled CLS [B, D] -> logits, act."""
         for mod in self.scorer:
             m = mod(m)
@@ -729,12 +770,12 @@ class Model(nn.Module):
         top2 = mx.topk(p, 2, axis=-1)                     # ascending order in MLX
         feats = mx.stack([top2[:, -1], top2[:, -1] - top2[:, -2], ent, k / 255.0], axis=-1)
         pooled = pooled.astype(mx.float32)
-        act_in = mx.concatenate([pooled, feats], axis=-1).astype(self.act_head[0].weight.dtype)
+        act_in = mx.concatenate([pooled, feats], axis=-1).astype(cast(Linear, self.act_head[0]).weight.dtype)
         for mod in self.act_head:
             act_in = mod(act_in)
         return logits, act_in
 
-    def __call__(self, input_ids, attention_mask, marker_pos, marker_mask, qtype):
+    def __call__(self, input_ids: mx.array, attention_mask: mx.array, marker_pos: mx.array, marker_mask: mx.array, qtype: mx.array) -> tuple[mx.array, mx.array]:
         h = self.encoder(input_ids, attention_mask)
         h = h + self.type_emb(qtype)[:, None, :]
         if self.head is not None:
@@ -745,7 +786,7 @@ class Model(nn.Module):
         m = h[mx.arange(B)[:, None], pos]                 # gather marker positions -> [B, K, D]
         return self._score_tail(m, h[:, 0], marker_mask)
 
-    def forward_packed(self, input_ids, attention_mask, marker_pos, marker_mask, qtype, pack):
+    def forward_packed(self, input_ids: mx.array, attention_mask: mx.array, marker_pos: mx.array, marker_mask: mx.array, qtype: mx.array, pack: Pack) -> tuple[mx.array, mx.array]:
         """Unpadded (varlen) forward for padded batches.
 
         input_ids [B, L] is gathered to packed ids [T] via pack["flat_idx"];
@@ -768,7 +809,7 @@ class Model(nn.Module):
         return self._score_tail(m, h[pack["cls_idx"]], marker_mask)
 
 
-def _resolve_model_dir(model_dir):
+def _resolve_model_dir(model_dir: str) -> str:
     if os.path.isdir(model_dir):
         return model_dir
     try:
@@ -778,7 +819,7 @@ def _resolve_model_dir(model_dir):
         return model_dir
 
 
-def load_model(model_dir, dtype="float32"):
+def load_model(model_dir: str, dtype: str | mx.Dtype = "float32") -> Model:
     """Build the MLX model and strictly load converted weights from ``model_dir``.
 
     ``dtype`` is the compute dtype: every floating parameter is cast to it at load
@@ -787,15 +828,15 @@ def load_model(model_dir, dtype="float32"):
     """
     model_dir = _resolve_model_dir(model_dir)
     with open(os.path.join(model_dir, "encoder", "config.json")) as f:
-        encoder_config = json.load(f)
+        encoder_config: dict[str, Any] = json.load(f)
     with open(os.path.join(model_dir, "rl_agent_config.json")) as f:
-        agent_config = json.load(f)
+        agent_config: dict[str, Any] = json.load(f)
     if isinstance(dtype, str):
         if dtype not in _DTYPES:
             raise ValueError("dtype must be one of %s, got %r" % (sorted(_DTYPES), dtype))
         dtype = _DTYPES[dtype]
     model = Model(encoder_config, agent_config)
-    weights = mx.load(os.path.join(model_dir, "model.safetensors"))
+    weights = cast(dict[str, mx.array], mx.load(os.path.join(model_dir, "model.safetensors")))
     weights = {k: (v.astype(dtype) if k != "temperature" and mx.issubdtype(v.dtype, mx.floating)
                    else v.astype(mx.float32))
                for k, v in weights.items()}

@@ -47,8 +47,27 @@ Three W-staging modes (TALL_MODE env, default "scatter"):
 """
 
 import os
+from collections.abc import Iterator
+from typing import Any, Protocol, cast
 
 import mlx.core as mx
+from mlx.nn.layers.base import Module
+from mlx.nn.layers.linear import Linear
+
+
+class _MetalKernel(Protocol):
+    """Callable returned by ``mx.fast.metal_kernel`` (stubbed as ``object``)."""
+
+    def __call__(
+        self,
+        *,
+        inputs: list[mx.array],
+        template: list[tuple[str, Any]],
+        grid: tuple[int, int, int],
+        threadgroup: tuple[int, int, int],
+        output_shapes: list[tuple[int, ...]],
+        output_dtypes: list[mx.Dtype],
+    ) -> list[mx.array]: ...
 
 _METAL_HEADER = """
 #include <metal_simdgroup_matrix>
@@ -131,14 +150,15 @@ _TALL_SOURCE = """
     }
 """
 
+_tall_kernel: _MetalKernel | None
 try:
-    _tall_kernel = mx.fast.metal_kernel(
+    _tall_kernel = cast(_MetalKernel, mx.fast.metal_kernel(
         name="tall_gemm_mma",
         input_names=["xp", "Wt"],
         output_names=["yp"],
         header=_METAL_HEADER,
         source=_TALL_SOURCE,
-    )
+    ))
 except Exception:  # Metal unavailable
     _tall_kernel = None
 
@@ -277,21 +297,23 @@ _TALL_SCATTER_SOURCE = """
     }
 """
 
+_tall_tload_kernel: _MetalKernel | None
+_tall_scatter_kernel: _MetalKernel | None
 try:
-    _tall_tload_kernel = mx.fast.metal_kernel(
+    _tall_tload_kernel = cast(_MetalKernel, mx.fast.metal_kernel(
         name="tall_gemm_mma_tload",
         input_names=["xp", "W"],
         output_names=["yp"],
         header=_METAL_HEADER,
         source=_TALL_TLOAD_SOURCE,
-    )
-    _tall_scatter_kernel = mx.fast.metal_kernel(
+    ))
+    _tall_scatter_kernel = cast(_MetalKernel, mx.fast.metal_kernel(
         name="tall_gemm_mma_scatter",
         input_names=["xp", "W"],
         output_names=["yp"],
         header=_METAL_HEADER,
         source=_TALL_SCATTER_SOURCE,
-    )
+    ))
 except Exception:  # Metal unavailable
     _tall_tload_kernel = None
     _tall_scatter_kernel = None
@@ -306,10 +328,10 @@ _KT = int(os.environ.get("TALL_KT", "64"))
 # its N gives 82 threadgroups at BN=64 -- enough to fill 30 cores. The
 # N=1024 shapes win in isolated chains but lose in-context (dependent-op
 # latency, not throughput, dominates there); Wqkv is neutral-to-negative.
-_CFG_TABLE = {
+_CFG_TABLE: dict[tuple[int, int], tuple[int, int]] = {
     (5248, 1024): (64, 1),
 }
-_CFG_DEFAULT = None
+_CFG_DEFAULT: tuple[int, int] | None = None
 _MPSG = int(os.environ.get("TALL_MPSG", "0"))  # 0 = use table
 
 _BN_OVERRIDE = os.environ.get("TALL_BN")  # "N:BN,N:BN" sweep hook
@@ -319,13 +341,13 @@ if os.environ.get("TALL_WT") == "1":
     _MODE = "wt"
 
 
-def _cfg_for(N, K):
+def _cfg_for(N: int, K: int) -> tuple[int | None, int]:
     if _BN_OVERRIDE:
         for kv in _BN_OVERRIDE.split(","):
-            k, v = kv.split(":")
-            if int(k) == N:
-                v = int(v)
-                return (v if N % v == 0 else None,
+            n_text, bn_text = kv.split(":")
+            if int(n_text) == N:
+                override_bn = int(bn_text)
+                return (override_bn if N % override_bn == 0 else None,
                         _MPSG if _MPSG else 1)
         return None, 1
     cfg = _CFG_TABLE.get((N, K), _CFG_DEFAULT)
@@ -339,7 +361,7 @@ def _cfg_for(N, K):
     return bn, mpsg
 
 
-def tall_linear(lin, x):
+def tall_linear(lin: Linear, x: mx.array) -> mx.array | None:
     """x[...,K] @ lin.weight[N,K]^T (+bias) via the tall-skinny MMA kernel.
 
     Returns None when ineligible (caller falls back to lin(x)). See module
@@ -350,7 +372,7 @@ def tall_linear(lin, x):
     W = lin.weight
     if W.dtype != mx.float16 or W.ndim != 2:
         return None
-    N, K = W.shape
+    N, K = cast(tuple[int, int], W.shape)
     if x.shape[-1] != K:
         return None
     M = x.size // K
@@ -373,7 +395,7 @@ def tall_linear(lin, x):
     if mode == "wt":
         # Cached on the Linear object itself: id()-keyed dicts are unsafe
         # because a GC'd Linear's id can be reused by a new one.
-        Wt = getattr(lin, "_tall_wt", None)
+        Wt = cast(mx.array | None, getattr(lin, "_tall_wt", None))
         if Wt is None:
             Wt = mx.contiguous(W.T)
             mx.eval(Wt)
@@ -400,21 +422,20 @@ def tall_linear(lin, x):
         output_dtypes=[x.dtype],
     )[0]
     y = y.reshape(*x.shape[:-1], N)
-    bias = getattr(lin, "bias", None)
+    bias = cast(mx.array | None, getattr(lin, "bias", None))
     if bias is not None:
         y = y + bias
     return y
 
 
-def _iter_linears(module):
+def _iter_linears(module: Module) -> Iterator[Linear]:
     """Yield every nn.Linear in a Module tree (uses MLX's named_modules)."""
-    import mlx.nn as nn
-    for _, m in module.named_modules():
-        if isinstance(m, nn.Linear):
+    for _, m in module.named_modules():  # type: ignore[no-untyped-call]  # reason: mlx Module.named_modules is untyped
+        if isinstance(m, Linear):
             yield m
 
 
-def prewarm(module):
+def prewarm(module: Module) -> int:
     """Build the cached Wt[K,N] transpose on every eligible nn.Linear under
     ``module`` (e.g. ``model.encoder``); returns the count warmed.
 
@@ -427,18 +448,18 @@ def prewarm(module):
     """
     if _MODE != "wt":
         return 0
-    wts = []
+    wts: list[mx.array] = []
     for lin in _iter_linears(module):
         W = lin.weight
         if W.ndim != 2 or W.dtype != mx.float16:
             continue
-        N, K = W.shape
+        N, K = cast(tuple[int, int], W.shape)
         bn, _ = _cfg_for(N, K)
         if bn is None or K % _KT:
             continue
         if getattr(lin, "_tall_wt", None) is None:
             lin._tall_wt = mx.contiguous(W.T)
-        wts.append(lin._tall_wt)
+        wts.append(cast(mx.array, lin._tall_wt))
     if wts:
         mx.eval(*wts)
     return len(wts)

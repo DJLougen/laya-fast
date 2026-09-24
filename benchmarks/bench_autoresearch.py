@@ -27,8 +27,14 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import numpy as np
+import numpy.typing as npt
+
+if TYPE_CHECKING:
+    import laya_api
+
 
 ROOT = Path(__file__).resolve().parent.parent
 BENCH_DIR = Path(__file__).resolve().parent
@@ -45,15 +51,43 @@ SCORE_TOL = 5e-2
 ACT_TOL = 5e-2
 
 
-def build_agent(model_dir, dtype, compile_flag):
+
+class FixtureResult(TypedDict):
+    """run_all output per fixture; also the golden JSON's per-fixture shape."""
+
+    answers: dict[str, dict[str, Any]]
+    usage: "laya_api.Usage"
+    logits: list[list[float]]
+    act: list[list[float]]
+
+class GoldenDoc(TypedDict):
+    """Top-level golden reference document."""
+
+    _note: str
+    _dtype: str
+    _mlx: str
+    fixtures: dict[str, FixtureResult]
+
+
+class TimingStats(TypedDict):
+    """Per-fixture timing statistics."""
+
+    p50_ms: float
+    min_ms: float
+    p90_ms: float
+    mean_ms: float
+    std_ms: float
+    samples: int
+
+def build_agent(model_dir: str, dtype: str, compile_flag: bool) -> Any:
     import laya_api
     return laya_api.LayaMLX(model_dir, dtype=dtype, compile=compile_flag)
 
 
-def run_all(agent, fixtures):
+def run_all(agent: Any, fixtures: dict[str, tuple[str, dict[str, Any]]]) -> dict[str, FixtureResult]:
     """{fixture: {"answers": ..., "logits": [[...]], "act": [[...]]}} for gating."""
     import mlx.core as mx
-    out = {}
+    out: dict[str, FixtureResult] = {}
     for name, (state, questions) in fixtures.items():
         res = agent.system_one(state, questions)
         if agent.last_raw is not None:
@@ -68,9 +102,9 @@ def run_all(agent, fixtures):
     return out
 
 
-def compare(golden, current):
+def compare(golden: dict[str, FixtureResult], current: dict[str, FixtureResult]) -> tuple[list[str], float, float]:
     """Return (failures, max_abs_logit_diff, max_abs_prob_diff)."""
-    fails = []
+    fails: list[str] = []
     max_logit = 0.0
     max_prob = 0.0
 
@@ -101,7 +135,7 @@ def compare(golden, current):
             # Raw act logits run ~4e3 in magnitude, so an absolute tolerance on
             # them would reject a legitimate precision change while a saturated
             # softmax makes the emitted probability identical.
-            def _sm0(x):
+            def _sm0(x: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
                 e = np.exp(x - x.max(-1, keepdims=True))
                 return (e / e.sum(-1, keepdims=True))[:, 0]
             d = float(np.abs(_sm0(ga) - _sm0(ca)).max())
@@ -150,19 +184,19 @@ def compare(golden, current):
     return fails, max_logit, max_prob
 
 
-def time_fixtures(agent, fixtures, warmups, samples):
+def time_fixtures(agent: Any, fixtures: dict[str, tuple[str, dict[str, Any]]], warmups: int, samples: int) -> dict[str, TimingStats]:
     import mlx.core as mx
 
-    def sync():
+    def sync() -> None:
         if agent.last_raw is not None:
             mx.eval(*agent.last_raw)
 
-    stats = {}
+    stats: dict[str, TimingStats] = {}
     for name, (state, questions) in fixtures.items():
         for _ in range(warmups):
             agent.system_one(state, questions)
             sync()
-        times = []
+        times: list[float] = []
         for _ in range(samples):
             t0 = time.perf_counter()
             agent.system_one(state, questions)
@@ -184,7 +218,7 @@ def time_fixtures(agent, fixtures, warmups, samples):
     return stats
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--agent", default=os.environ.get("LAYA_AGENT", "fast"),
@@ -214,20 +248,20 @@ def main(argv=None):
     import mlx.core as mx
     mx.random.seed(0)
     np.random.seed(0)
-    import benchmark  # fixtures live here; keeps the workload identical to the parity suite
+    import benchmark  # type: ignore[import-not-found]  # reason: sibling module resolved via sys.path.insert(BENCH_DIR); fixtures live here, keeps the workload identical to the parity suite
     fixtures = benchmark.make_fixtures()
 
     t0 = time.perf_counter()
     if args.agent == "fast":
         from laya_fast import LayaFast
-        agent = LayaFast(args.model)
+        agent: Any = LayaFast(args.model)
     else:
         agent = build_agent(args.model, args.dtype, not args.no_compile)
     load_s = time.perf_counter() - t0
 
     if args.write_golden:
         current = run_all(agent, fixtures)
-        payload = {
+        payload: GoldenDoc = {
             "_note": "Frozen decision reference for verify.sh. Regenerate ONLY "
                      "with an explicit, justified --write-golden run.",
             "_dtype": args.dtype,

@@ -31,10 +31,13 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Callable, Mapping
+from types import ModuleType
+from typing import Any, NotRequired, TypedDict, cast
 
 # Bound CPU threading before numpy/torch initialize their pools. --threads is
 # pre-scanned so the flag works even though heavy imports happen later.
-def _early_threads(default="4"):
+def _early_threads(default: str = "4") -> str:
     for i, a in enumerate(sys.argv):
         if a == "--threads" and i + 1 < len(sys.argv):
             return sys.argv[i + 1]
@@ -51,11 +54,129 @@ import time
 from pathlib import Path
 
 import numpy as np
+import numpy.typing as npt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # laya_api lives at repo root
 
 import laya_api
-from laya_api import QTYPES, QTYPE_NAMES, temp_bucket
+from laya_api import QTYPES, QTYPE_NAMES, QuestionDef, temp_bucket, Questions
+
+
+class PrepEntry(TypedDict):
+    """Per-key collate comparison inside a parity case."""
+
+    shape_ref: list[int]
+    shape_mlx: list[int]
+    equal: bool
+
+
+class PerQ(TypedDict):
+    """Per-question raw-logit comparison row."""
+
+    qid: Any
+    qtype: str
+    k: int
+    temp_bucket: str
+    logit_max_abs_diff: float
+    prob_max_abs_diff: float
+    act_max_abs_diff: float
+    argmax_ref: int
+    argmax_mlx: int
+    argmax_agree: bool
+
+
+class RawCase(TypedDict):
+    """Raw-logit summary for one parity case."""
+
+    logit_max_abs_diff: float | None
+    act_max_abs_diff: float | None
+    per_question: NotRequired[list[PerQ]]
+
+
+class FormattedCase(TypedDict):
+    """Formatted system_one comparison for one parity case."""
+
+    model_field: str | None
+    usage_ref: laya_api.Usage | None
+    usage_mlx: laya_api.Usage | None
+    usage_equal: bool
+    answer_diffs: list[dict[str, Any]]
+
+
+class ParityCase(TypedDict):
+    """One fixture's parity report entry (mixed_padding omits several keys)."""
+
+    n_questions: int
+    seq_lens: NotRequired[list[int]]
+    padded_len: NotRequired[int]
+    input_tokens: NotRequired[int]
+    prep: NotRequired[dict[str, PrepEntry]]
+    prep_equal: NotRequired[bool]
+    raw: NotRequired[RawCase]
+    formatted: NotRequired[FormattedCase]
+
+
+ParitySummary = TypedDict("ParitySummary", {
+    "max_logit_err": float,
+    "max_prob_err": float,
+    "max_act_err": float,
+    "qtypes": list[str],
+    "temp_buckets": list[str],
+    "n_cases": int,
+    "pass": bool,
+})
+
+
+class ParityReport(TypedDict):
+    """Top-level JSON document emitted by cmd_parity."""
+
+    source: str
+    model: str
+    oracle: dict[str, str]
+    mlx: dict[str, str]
+    tolerances: dict[str, float]
+    threads: int
+    cases: dict[str, ParityCase]
+    failures: list[str]
+    summary: NotRequired[ParitySummary]
+
+
+class ArmMeta(TypedDict, total=False):
+    """Per-arm metadata merged into the runtime report's metadata block."""
+
+    device: str
+    torch_threads: int
+    mlx_version: str
+    compiled: bool
+
+
+class RuntimeCase(TypedDict):
+    """One fixture's timing row in the runtime report."""
+
+    n_questions: int
+    input_tokens: int
+    samples: int
+    wall_ms: list[float]
+    mean_ms: float
+    std_ms: float
+    min_ms: float
+    p50_ms: float
+    max_ms: float
+
+
+class RuntimeReport(TypedDict):
+    """Top-level JSON document emitted by cmd_runtime."""
+
+    arm: str
+    dtype: str
+    source: Any
+    model: Any
+    threads: int
+    warmups: int
+    samples: int
+    load_seconds: float
+    cases: dict[str, RuntimeCase]
+    metadata: dict[str, Any]
 
 # ----------------------------------------------------------------------------- fixtures
 _SHORT_STATE = (
@@ -69,7 +190,7 @@ _LONG_STATE = (
 )
 
 
-def _questions8():
+def _questions8() -> Questions:
     """Eight questions covering all qtypes and every temperature bucket."""
     return {
         "q_choice2": {"type": "choice", "instructions": "Is the customer asking for a refund?",
@@ -94,7 +215,7 @@ def _questions8():
     }
 
 
-def make_fixtures():
+def make_fixtures() -> dict[str, tuple[str, Questions]]:
     """Deterministic shared fixtures: {name: (state, questions)}. Same in every arm/process."""
     return {
         "single_short": (_SHORT_STATE, {"q_choice4": _questions8()["q_choice4"]}),
@@ -105,12 +226,12 @@ def make_fixtures():
 
 
 # ----------------------------------------------------------------------------- torch oracle / arm
-def _import_source(source_dir):
+def _import_source(source_dir: str) -> tuple[ModuleType, ModuleType]:
     source_dir = str(Path(source_dir).resolve())
     if source_dir not in sys.path:
         sys.path.insert(0, source_dir)
-    import rl_agent_api  # noqa: F401  (source/rl_agent_api.py)
-    import rl_common
+    import rl_agent_api  # type: ignore[import-not-found]  # reason: lives in gitignored source/ dir, not tracked  # noqa: F401
+    import rl_common  # type: ignore[import-not-found]  # reason: lives in gitignored source/ dir, not tracked
     return rl_agent_api, rl_common
 
 
@@ -118,21 +239,21 @@ class _AutocastModel:
     """Wrap a DecisionModel so calls run under torch.autocast (used for the MPS fp16 arm,
     since RLAgent only enables autocast on CUDA)."""
 
-    def __init__(self, model, device_type, dtype):
+    def __init__(self, model: Any, device_type: str, dtype: Any) -> None:
         object.__setattr__(self, "_m", model)
         object.__setattr__(self, "_dev", device_type)
         object.__setattr__(self, "_dt", dtype)
 
-    def __call__(self, *a, **kw):
+    def __call__(self, *a: Any, **kw: Any) -> Any:
         import torch
         with torch.autocast(device_type=self._dev, dtype=self._dt, enabled=True):
             return self._m(*a, **kw)
 
-    def __getattr__(self, k):
+    def __getattr__(self, k: str) -> Any:
         return getattr(object.__getattribute__(self, "_m"), k)
 
 
-def build_torch_agent(source_dir, device, dtype):
+def build_torch_agent(source_dir: str, device: str, dtype: str) -> Any:
     """RLAgent on device. dtype float32 -> stock fp32; float16 -> fp16 autocast wrapper."""
     import torch
     rl_agent_api, _ = _import_source(source_dir)
@@ -144,7 +265,7 @@ def build_torch_agent(source_dir, device, dtype):
     return agent
 
 
-def torch_raw_forward(agent, batch, device):
+def torch_raw_forward(agent: Any, batch: laya_api.Batch, device: str) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]:
     """Raw (option_logits, act_logits) from the torch model on a laya_api numpy batch."""
     import torch
     dev = torch.device(device)
@@ -158,14 +279,14 @@ def torch_raw_forward(agent, batch, device):
     return logits.float().cpu().numpy(), act.float().cpu().numpy()
 
 
-def reference_collate(rl_common, items, pad_id):
+def reference_collate(rl_common: ModuleType, items: list[laya_api.Item], pad_id: int) -> Any:
     """rl_common.collate_items on items shaped the way rl_agent_api.system_one builds them."""
     full = [dict(it, target=[0.0] * len(it["markers"]), label=-1, episode=0, ep_step=0,
                  ep_len=1, src="api") for it in items]
     return rl_common.collate_items([full], pad_id)
 
 
-def count_input_tokens(source_dir, state, questions):
+def count_input_tokens(source_dir: str, state: str, questions: Questions) -> int:
     """input_tokens for a fixture via the source-side prep (used for torch-arm metadata)."""
     rl_agent_api, rl_common = _import_source(source_dir)
     from transformers import AutoTokenizer
@@ -180,22 +301,22 @@ def count_input_tokens(source_dir, state, questions):
 
 
 # ----------------------------------------------------------------------------- parity
-def _default_tols(mlx_dtype, oracle_dtype):
+def _default_tols(mlx_dtype: str, oracle_dtype: str) -> dict[str, float]:
     fp16 = "float16" in (mlx_dtype, oracle_dtype)
     if fp16:
         return {"logit": 5e-2, "prob": 2e-2, "act": 5e-2}
     return {"logit": 2e-3, "prob": 5e-4, "act": 2e-3}
 
 
-def _softmax_row(z):
+def _softmax_row(z: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
     z = z - z.max()
     e = np.exp(z)
-    return e / e.sum()
+    return cast(npt.NDArray[np.float32], e / e.sum())
 
 
-def _answers_agree(ref_ans, mlx_ans, prob_tol):
+def _answers_agree(ref_ans: Mapping[str, Any], mlx_ans: Mapping[str, Any], prob_tol: float) -> list[dict[str, Any]]:
     """Compare formatted answers: labels exact, numeric fields within prob_tol."""
-    diffs = []
+    diffs: list[dict[str, Any]] = []
     for qid, ra in ref_ans.items():
         ma = mlx_ans.get(qid)
         if ma is None:
@@ -231,32 +352,35 @@ def _answers_agree(ref_ans, mlx_ans, prob_tol):
     return diffs
 
 
-def cmd_parity(args):
+def cmd_parity(args: argparse.Namespace) -> int:
     import torch  # noqa: F401  (oracle always needs torch)
     rl_agent_api, rl_common = _import_source(args.source)
     oracle = build_torch_agent(args.source, args.oracle_device, args.oracle_dtype)
     mlx_agent = laya_api.LayaMLX(args.model, dtype=args.mlx_dtype)
     tols = _default_tols(args.mlx_dtype, args.oracle_dtype)
+    k: Any
     for k in tols:
         v = getattr(args, "%s_tol" % k)
         if v is not None:
             tols[k] = v
 
     fixtures = make_fixtures()
-    report = {"source": str(args.source), "model": str(args.model),
+    report: ParityReport = {"source": str(args.source), "model": str(args.model),
               "oracle": {"device": args.oracle_device, "dtype": args.oracle_dtype},
               "mlx": {"dtype": args.mlx_dtype}, "tolerances": tols,
               "threads": int(_THREADS), "cases": {}, "failures": []}
     max_errs = {"logit": 0.0, "prob": 0.0, "act": 0.0}
-    qtypes_seen, buckets_seen = set(), set()
+    qtypes_seen: set[int] = set()
+    buckets_seen: set[str] = set()
     pad_id = mlx_agent.tok.pad_token_id
 
-    def check(cond, msg):
+    def check(cond: object, msg: str) -> None:
         if not cond:
             report["failures"].append(msg)
 
+    ld: npt.NDArray[np.float32] | float
     for name, (state, questions) in fixtures.items():
-        case = {"n_questions": len(questions)}
+        case: ParityCase = {"n_questions": len(questions)}
         ids, items, batch = mlx_agent.prepare(state, questions)
         case["seq_lens"] = [len(it["ids"]) for it in items]
         case["padded_len"] = int(batch["input_ids"].shape[1])
@@ -266,10 +390,10 @@ def cmd_parity(args):
 
         # ---- prep parity vs rl_common.collate_items
         ref = reference_collate(rl_common, items, pad_id)
-        prep = {}
+        prep: dict[str, PrepEntry] = {}
         for key in ("input_ids", "attention_mask", "marker_pos", "marker_mask", "qtype"):
             rv = ref[key].numpy()
-            mv = batch[key]
+            mv = cast(Mapping[str, Any], batch)[key]
             prep[key] = {"shape_ref": list(rv.shape), "shape_mlx": list(mv.shape),
                          "equal": bool(rv.shape == mv.shape and (rv == mv).all())}
             check(prep[key]["equal"], "%s: prep mismatch in %s" % (name, key))
@@ -285,7 +409,7 @@ def cmd_parity(args):
               % (name, t_logits.shape, m_logits.shape))
         check(t_act.shape == m_act.shape, "%s: act shape %s vs %s" % (name, t_act.shape, m_act.shape))
 
-        per_q = []
+        per_q: list[PerQ] = []
         for r, qid in enumerate(ids):
             q = laya_api._to_internal(questions[qid])
             k = len(items[r]["markers"])
@@ -333,7 +457,7 @@ def cmd_parity(args):
     mixed_items = items_s + items_l
     mixed = laya_api.collate_items(mixed_items, pad_id)
     ref_mixed = reference_collate(rl_common, mixed_items, pad_id)
-    prep_eq = all(ref_mixed[k].numpy().shape == mixed[k].shape and (ref_mixed[k].numpy() == mixed[k]).all()
+    prep_eq = all(ref_mixed[k].numpy().shape == cast(Mapping[str, Any], mixed)[k].shape and (ref_mixed[k].numpy() == cast(Mapping[str, Any], mixed)[k]).all()
                   for k in ("input_ids", "attention_mask", "marker_pos", "marker_mask", "qtype"))
     t_logits, t_act = torch_raw_forward(oracle, mixed, args.oracle_device)
     m_logits, m_act = mlx_agent.raw_forward(mixed)
@@ -373,7 +497,7 @@ def cmd_parity(args):
 
 
 # ----------------------------------------------------------------------------- runtime
-def build_arm(args):
+def build_arm(args: argparse.Namespace) -> tuple[Any, Callable[[], None], ArmMeta]:
     """Construct one benchmark arm. Errors are fatal — no silent fallback."""
     if args.arm == "torch-cpu":
         if args.dtype != "float32":
@@ -398,7 +522,7 @@ def build_arm(args):
         import mlx.core as mx
         agent = laya_api.LayaMLX(args.model, dtype=args.dtype, compile=getattr(args, "compile", False))
 
-        def sync():
+        def sync() -> None:
             if agent.last_raw is not None:
                 mx.eval(*agent.last_raw)
         return agent, sync, {"device": "mlx-gpu", "mlx_version": getattr(mx, "__version__", "unknown"),
@@ -406,13 +530,13 @@ def build_arm(args):
     raise SystemExit("unknown arm %r" % args.arm)
 
 
-def cmd_runtime(args):
+def cmd_runtime(args: argparse.Namespace) -> int:
     t_load0 = time.perf_counter()
     agent, sync, arm_meta = build_arm(args)
     load_s = time.perf_counter() - t_load0
 
     fixtures = make_fixtures()
-    report = {"arm": args.arm, "dtype": args.dtype, "source": args.source, "model": args.model,
+    report: RuntimeReport = {"arm": args.arm, "dtype": args.dtype, "source": args.source, "model": args.model,
               "threads": int(args.threads), "warmups": args.warmups, "samples": args.samples,
               "load_seconds": round(load_s, 3), "cases": {},
               "metadata": {"platform": sys.platform, "python": sys.version.split()[0],
@@ -430,7 +554,7 @@ def cmd_runtime(args):
         for _ in range(args.warmups):
             agent.system_one(state, questions)
             sync()
-        times = []
+        times: list[float] = []
         for _ in range(args.samples):
             t0 = time.perf_counter()
             agent.system_one(state, questions)
@@ -456,7 +580,7 @@ def cmd_runtime(args):
 
 
 # ----------------------------------------------------------------------------- CLI
-def _emit(report, output):
+def _emit(report: ParityReport | RuntimeReport, output: str | None) -> None:
     text = json.dumps(report, indent=2)
     if output:
         with open(output, "w") as f:
@@ -466,7 +590,7 @@ def _emit(report, output):
         print(text)
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="benchmark.py", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -516,7 +640,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
     if args.cmd == "runtime" and args.samples < 1:
         ap.error("--samples must be >= 1")
-    return args.fn(args)
+    return cast(int, args.fn(args))
 
 
 if __name__ == "__main__":

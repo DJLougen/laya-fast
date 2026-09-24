@@ -47,14 +47,16 @@ import os
 import re
 import sys
 import time
+from typing import Any, NotRequired, TypedDict, cast
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 sys.path.insert(0, ROOT)
 
-from quality_suite import (TASKS, ACTION_LABELS, COND_LABELS, COND_PLAIN, ASPECT_LABELS,
+from quality_suite import (TASKS, Task, ACTION_LABELS, COND_LABELS, COND_PLAIN, ASPECT_LABELS,  # type: ignore[import-not-found]  # reason: sibling module resolved via sys.path.insert(HERE)
                            ENT_LABELS, SEV_LEVELS, CONFIRM_RULE)
+from laya_api import QuestionDef, Questions
 
 JEV_API = "https://api.typesafe.ai/v1/systemone"
 JEV_MODEL = "jev-latest"
@@ -92,19 +94,122 @@ EXPECTED_FAMILY_COUNTS = {"route": 15, "conditions": 15, "aspects": 15,
                           "entities": 15, "severity": 15, "verify": 15, "records": 15}
 
 
+# --------------------------------------------------------------------------- schemas
+
+
+class RequestBody(TypedDict):
+    """Frozen request body sent to a backend for one case."""
+
+    state: Any
+    model: str
+    questions: Questions
+
+
+class PrepInfo(TypedDict, total=False):
+    """Best-effort per-question tokenization info attached to a result row."""
+
+    seq_lens: dict[str, int]
+    max_len: int | None
+    possibly_truncated: list[str] | None
+    prep_error: str
+
+
+class UsageTotals(TypedDict):
+    """Cumulative usage accounting across all requests."""
+
+    requests: int
+    attempts: int
+    input_tokens: int
+    output_tokens: int
+    fields: dict[str, float]
+    non_numeric_fields: list[str]
+    usage_complete: bool
+    cost_usd: float | None
+
+
+class RuntimeDetail(TypedDict):
+    """Runtime configuration recorded in the results document."""
+
+    source: str | None
+    model_dir: str | None
+    dtype: str | None
+    torch_threads: int | None
+    key_source: str | None
+
+
+class Caps(TypedDict):
+    max_attempts: int
+    max_input_tokens: int
+    note: str
+
+
+class ProbeRecord(TypedDict):
+    """Calibration probe request/response record."""
+
+    request: RequestBody
+    status: int
+    response: Any
+    latency_ms: int
+
+
+class ResultRow(TypedDict):
+    """One case's result row in the results document."""
+
+    id: str
+    family: str
+    split: str
+    request: RequestBody
+    output: Any
+    latency_ms: int
+    prep: NotRequired[PrepInfo]
+
+
+class DumpRequestRow(TypedDict):
+    """One case entry in the --dump-requests document."""
+
+    id: str
+    family: str
+    split: str
+    request: RequestBody
+
+
+class DumpDoc(TypedDict):
+    """Document emitted by --dump-requests (no inference run)."""
+
+    suite_sha256: str
+    suite_provenance: str
+    calibration_probe: RequestBody
+    requests: list[DumpRequestRow]
+
+
+class ResultsDoc(TypedDict):
+    """Persisted results document written incrementally during a run."""
+
+    model: str
+    runtime: str
+    runtime_detail: RuntimeDetail
+    suite_sha256: str
+    suite_provenance: str
+    caps: Caps
+    results: list[ResultRow]
+    errors: list[str]
+    calibration_probe: ProbeRecord | None
+    usage: UsageTotals
+
+
 # --------------------------------------------------------------------------- questions
 # Ported verbatim from jev-gliner-x-post/run_jev.py build(); question IDs must match
 # quality_expected.json exactly (380 decisions across 105 cases).
 
-def noul(instr):
+def noul(instr: str) -> QuestionDef:
     return {"type": "noul", "instructions": instr}
 
 
-def choice(instr, criteria):
+def choice(instr: str, criteria: Any) -> QuestionDef:
     return {"type": "choice", "instructions": instr, "criteria": criteria}
 
 
-def build(item):
+def build(item: Task) -> RequestBody:
     fam, inp = item["family"], item["input"]
     if fam == "route":
         state = inp + " | " + CONFIRM_RULE
@@ -151,7 +256,7 @@ def build(item):
     return {"state": state, "model": JEV_MODEL, "questions": qs}
 
 
-def calibration_probe_body():
+def calibration_probe_body() -> RequestBody:
     return {
         "state": "A fair coin was flipped and the result is hidden.",
         "model": JEV_MODEL,
@@ -164,7 +269,7 @@ def calibration_probe_body():
 
 # --------------------------------------------------------------------------- suite checks
 
-def suite_sha256():
+def suite_sha256() -> str:
     h = hashlib.sha256()
     with open(SUITE_FILE, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
@@ -172,24 +277,24 @@ def suite_sha256():
     return h.hexdigest()
 
 
-def check_suite():
+def check_suite() -> tuple[list[str], dict[str, RequestBody]]:
     """Fail-closed structural checks against the frozen contract: exact ordered case IDs,
     15 per family, build() succeeds for every item, and every question has a known type.
     Self-contained: reads only quality_suite.py, never the label-bearing expected file."""
-    problems = []
+    problems: list[str] = []
     ids = [t["id"] for t in TASKS]
     if ids != EXPECTED_IDS:
         problems.append(f"case IDs differ from frozen expectation "
                         f"(missing={sorted(set(EXPECTED_IDS) - set(ids))}, "
                         f"extra={sorted(set(ids) - set(EXPECTED_IDS))}, "
                         f"ordered_match={ids == EXPECTED_IDS})")
-    fams = {}
+    fams: dict[str, int] = {}
     for t in TASKS:
         fams[t["family"]] = fams.get(t["family"], 0) + 1
     if fams != EXPECTED_FAMILY_COUNTS:
         problems.append(f"family counts {fams} != {EXPECTED_FAMILY_COUNTS}")
 
-    built = {}
+    built: dict[str, RequestBody] = {}
     for t in TASKS:
         try:
             built[t["id"]] = build(t)
@@ -207,7 +312,7 @@ def check_suite():
 
 # --------------------------------------------------------------------------- credentials
 
-def load_jev_key():
+def load_jev_key() -> tuple[str, str]:
     """TYPESAFE_API_KEY from env, else a literal `export TYPESAFE_API_KEY=...` line parsed out
     of ~/.zshrc as text (never executed, never printed). No other credential files are read."""
     key = os.environ.get("TYPESAFE_API_KEY")
@@ -234,7 +339,7 @@ def load_jev_key():
 class JevBackend:
     name = "jev"
 
-    def __init__(self):
+    def __init__(self) -> None:
         import httpx
         key, self.key_source = load_jev_key()
         self.client = httpx.Client(
@@ -242,10 +347,10 @@ class JevBackend:
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
         self.attempts = 0
 
-    def system_one(self, state, questions, budget=None):
+    def system_one(self, state: Any, questions: Questions, budget: int | None = None) -> tuple[int, Any]:
         """One logical request. `budget` = remaining HTTP attempts allowed under the cap;
         each POST consumes one. Only 429 is retried, and only while budget remains."""
-        body = {"state": state, "model": JEV_MODEL, "questions": questions}
+        body: RequestBody = {"state": state, "model": JEV_MODEL, "questions": questions}
         delay = JEV_429_BASE_DELAY_S
         for attempt in range(JEV_429_RETRIES + 1):
             if budget is not None and budget <= 0:
@@ -271,18 +376,18 @@ class JevBackend:
             return r.status_code, payload
         return -1, {"error": "exhausted 429 retries"}
 
-    def prep_info(self, state, questions):
+    def prep_info(self, state: Any, questions: Questions) -> PrepInfo | None:
         # Jev tokenization is server-side; no local tokenizer is assumed.
         return None
 
-    def close(self):
+    def close(self) -> None:
         self.client.close()
 
 
 class MLXBackend:
     name = "mlx"
 
-    def __init__(self, model_dir, dtype):
+    def __init__(self, model_dir: str, dtype: str) -> None:
         from laya_api import LayaMLX
         self.agent = LayaMLX(model_dir, dtype=dtype)
         self.model_dir = model_dir
@@ -291,21 +396,21 @@ class MLXBackend:
         self.attempts = 0
 
     @staticmethod
-    def _read_max_len(model_dir):
+    def _read_max_len(model_dir: str) -> int | None:
         try:
             with open(os.path.join(model_dir, "rl_agent_config.json")) as f:
-                return json.load(f).get("max_len")
+                return cast(int | None, json.load(f).get("max_len"))
         except Exception:
             return None
 
-    def system_one(self, state, questions, budget=None):
+    def system_one(self, state: Any, questions: Questions, budget: int | None = None) -> tuple[int, Any]:
         self.attempts += 1
         try:
             return 200, self.agent.system_one(state, questions)
         except Exception as e:
             return -1, {"error": f"{type(e).__name__}: {e}"}
 
-    def prep_info(self, state, questions):
+    def prep_info(self, state: Any, questions: Questions) -> PrepInfo | None:
         """Per-question tokenized sequence lengths via LayaMLX.prepare(); flags sequences that
         hit max_len (possible truncation). Best-effort: returns None if prepare is unavailable."""
         prepare = getattr(self.agent, "prepare", None)
@@ -324,14 +429,14 @@ class MLXBackend:
                                         if self._max_len and n >= self._max_len]
                                        if self._max_len else None)}
 
-    def close(self):
+    def close(self) -> None:
         pass
 
 
 class TorchBackend:
     """Original RLAgent on an explicit device. No silent fallback: a missing device raises."""
 
-    def __init__(self, source_dir, device):
+    def __init__(self, source_dir: str, device: str) -> None:
         # Bound thread pools BEFORE importing torch so OMP/MKL pools are sized at init.
         os.environ.setdefault("OMP_NUM_THREADS", str(TORCH_THREADS))
         os.environ.setdefault("MKL_NUM_THREADS", str(TORCH_THREADS))
@@ -342,25 +447,26 @@ class TorchBackend:
             raise SystemExit("runtime=mps requested but torch.backends.mps.is_available() is False; "
                              "refusing to fall back to CPU")
         sys.path.insert(0, source_dir)
-        from rl_agent_api import RLAgent
+        from rl_agent_api import RLAgent  # type: ignore[import-not-found]  # reason: lives in gitignored source/ dir, not tracked
         self.agent = RLAgent(source_dir, device=device)
         self.name = f"{device}(RLAgent)"
         self.device = device
         self._max_len = self.agent.cfg.get("max_len")
         self.attempts = 0
 
-    def system_one(self, state, questions, budget=None):
+    def system_one(self, state: Any, questions: Questions, budget: int | None = None) -> tuple[int, Any]:
         self.attempts += 1
         try:
             return 200, self.agent.system_one(state, questions)
         except Exception as e:
             return -1, {"error": f"{type(e).__name__}: {e}"}
 
-    def prep_info(self, state, questions):
+    def prep_info(self, state: Any, questions: Questions) -> PrepInfo:
         """Per-question tokenized lengths via rl_common.build_sequence; flags max_len hits."""
         try:
-            from rl_common import build_sequence
-            seq_lens, truncated = {}, []
+            from rl_common import build_sequence  # type: ignore[import-not-found]  # reason: lives in gitignored source/ dir, not tracked
+            seq_lens: dict[str, int] = {}
+            truncated: list[str] = []
             for qid, qdef in questions.items():
                 q = self.agent._to_internal(qdef)
                 seq, _markers = build_sequence(self.agent.tok, state, q,
@@ -373,11 +479,11 @@ class TorchBackend:
         except Exception as e:
             return {"prep_error": f"{type(e).__name__}: {e}"}
 
-    def close(self):
+    def close(self) -> None:
         pass
 
 
-def make_backend(args):
+def make_backend(args: argparse.Namespace) -> JevBackend | MLXBackend | TorchBackend:
     if args.runtime == "jev":
         return JevBackend()
     if args.runtime == "mlx":
@@ -387,10 +493,10 @@ def make_backend(args):
 
 # --------------------------------------------------------------------------- calibration
 
-def check_probe(status, resp, runtime):
+def check_probe(status: int, resp: Any, runtime: str) -> list[str]:
     """Fail-closed calibration checks. Returns list of failure strings (empty = pass).
     Every malformed-shape outcome becomes a failure string; nothing raises."""
-    fails = []
+    fails: list[str] = []
     if status != 200 or not isinstance(resp, dict):
         return [f"calibration probe failed: HTTP/status {status}: {json.dumps(resp)[:400]}"]
     try:
@@ -423,7 +529,7 @@ def check_probe(status, resp, runtime):
 
 # --------------------------------------------------------------------------- main
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--runtime", choices=["jev", "mlx", "cpu", "mps"],
                     help="jev = TypeSafe API; mlx = converted checkpoint via laya_api.LayaMLX; "
@@ -447,20 +553,20 @@ def main():
         raise SystemExit(2)
 
     if args.dump_requests:
-        doc = {"suite_sha256": sha, "suite_provenance": SUITE_PROVENANCE,
+        dump_doc: DumpDoc = {"suite_sha256": sha, "suite_provenance": SUITE_PROVENANCE,
                "calibration_probe": calibration_probe_body(),
                "requests": [{"id": t["id"], "family": t["family"], "split": t["split"],
                              "request": built[t["id"]]} for t in TASKS]}
         with open(args.dump_requests, "w") as f:
-            json.dump(doc, f, indent=2, ensure_ascii=False)
-        print(f"wrote {args.dump_requests}: {len(doc['requests'])} case requests + 1 probe")
+            json.dump(dump_doc, f, indent=2, ensure_ascii=False)
+        print(f"wrote {args.dump_requests}: {len(dump_doc['requests'])} case requests + 1 probe")
         return
     if not args.runtime:
         ap.error("--runtime is required unless --dump-requests is given")
 
     out_path = args.output or os.path.join(ROOT, "benchmarks", "results", f"results_{args.runtime}.json")
 
-    doc = {
+    doc: ResultsDoc = {
         "model": JEV_MODEL if args.runtime == "jev" else f"rl-agent/{args.runtime}",
         "runtime": args.runtime,
         "runtime_detail": {"source": os.path.abspath(args.source) if args.runtime in ("cpu", "mps") else None,
@@ -481,7 +587,7 @@ def main():
                   "cost_usd": None},
     }
 
-    def save():
+    def save() -> None:
         os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
         with open(out_path, "w") as f:
             json.dump(doc, f, indent=2, ensure_ascii=False)
@@ -494,7 +600,7 @@ def main():
         raise
     doc["runtime_detail"]["key_source"] = getattr(backend, "key_source", None)
 
-    def record_usage(resp):
+    def record_usage(resp: Any) -> None:
         """Aggregate every numeric usage field the backend returns; mark incomplete when the
         usage object or input_tokens is absent/non-numeric. Non-numeric fields are named, not
         silently zeroed."""
@@ -556,8 +662,8 @@ def main():
             lat = int((time.time() - t0) * 1000)
             doc["usage"]["requests"] += 1
             if status == 200 and isinstance(resp, dict):
-                out = resp
-                doc["usage"]["input_tokens"] += usage_of(resp)
+                out: Any = resp
+                doc["usage"]["input_tokens"] += usage_of(resp)  # type: ignore[name-defined]  # reason: pre-existing undefined call preserved for runtime parity
                 if args.runtime == "jev" and isinstance(resp.get("model"), str):
                     doc["model"] = resp["model"]
             else:
@@ -565,7 +671,7 @@ def main():
                        else f"error: {json.dumps(resp)[:400]}")
                 out = msg
                 doc["errors"].append(f"{item['id']}: {msg}")
-            row = {"id": item["id"], "family": item["family"], "split": item["split"],
+            row: ResultRow = {"id": item["id"], "family": item["family"], "split": item["split"],
                    "request": body, "output": out, "latency_ms": lat}
             if prep is not None:
                 row["prep"] = prep

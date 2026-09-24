@@ -8,26 +8,28 @@ import argparse
 import os
 import sys
 import time
+from typing import Any
 import numpy as np
+import numpy.typing as npt
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, "source"))
 import torch
 import coremltools as ct
-from coremltools.converters.mil.mil import Builder as mb
+from coremltools.converters.mil.mil import Builder as mb  # type: ignore[import-untyped]  # reason: coremltools lacks stubs
 from coremltools.converters.mil.mil import types
-import coremltools.converters.mil.frontend.torch.ops as torch_ops
+import coremltools.converters.mil.frontend.torch.ops as torch_ops  # type: ignore[import-untyped]  # reason: coremltools lacks stubs
 
 
-def register_compatibility_ops():
+def register_compatibility_ops() -> None:
     """Register op converters bridging PyTorch 2.14 dialect to Core ML."""
-    @torch_ops.register_torch_op(torch_alias=["alias", "aten.alias.default"])
-    def alias_op(context, node):
+    @torch_ops.register_torch_op(torch_alias=["alias", "aten.alias.default"])  # type: ignore[untyped-decorator]  # reason: coremltools lacks stubs
+    def alias_op(context: Any, node: Any) -> None:
         inputs = torch_ops._get_inputs(context, node, expected=1)
         context.add(mb.identity(x=inputs[0], name=node.name))
 
-    @torch_ops.register_torch_op(override=True)
-    def gather(context, node):
+    @torch_ops.register_torch_op(override=True)  # type: ignore[untyped-decorator]  # reason: coremltools lacks stubs
+    def gather(context: Any, node: Any) -> None:
         inputs = torch_ops._get_inputs(context, node)
         indices = inputs[2]
         if types.is_float(indices.dtype):
@@ -36,8 +38,8 @@ def register_compatibility_ops():
         context.add(res)
 
 
-def convert_model(source_dir, output_path, seq_len=128, max_options=4):
-    from rl_agent_api import RLAgent
+def convert_model(source_dir: str, output_path: str, seq_len: int = 128, max_options: int = 4) -> Any:
+    from rl_agent_api import RLAgent  # type: ignore[import-not-found]  # reason: rl_agent_api lives in gitignored source/ dir, not tracked
     register_compatibility_ops()
 
     print(f"Loading PyTorch model from {source_dir}...")
@@ -68,7 +70,7 @@ def convert_model(source_dir, output_path, seq_len=128, max_options=4):
     return mlmodel
 
 
-def benchmark_coreml(model_path, seq_len=128, max_options=4, samples=30):
+def benchmark_coreml(model_path: str, seq_len: int = 128, max_options: int = 4, samples: int = 30) -> None:
     print(f"Benchmarking Core ML model at {model_path}...")
     t0 = time.perf_counter()
     model = ct.models.MLModel(model_path, compute_units=ct.ComputeUnit.ALL)
@@ -76,7 +78,7 @@ def benchmark_coreml(model_path, seq_len=128, max_options=4, samples=30):
     print(f"Load time: {load_time:.3f} s")
 
     B, L, K = 1, seq_len, max_options
-    inputs = {
+    inputs: dict[str, npt.NDArray[np.int32] | npt.NDArray[np.float32]] = {
         "input_ids": np.ones((B, L), dtype=np.int32),
         "attention_mask": np.ones((B, L), dtype=np.int32),
         "marker_pos": np.zeros((B, K), dtype=np.int32),
@@ -89,7 +91,7 @@ def benchmark_coreml(model_path, seq_len=128, max_options=4, samples=30):
         _ = model.predict(inputs)
 
     # Timed runs
-    timings = []
+    timings: list[float] = []
     for _ in range(samples):
         t0 = time.perf_counter()
         _ = model.predict(inputs)
@@ -102,7 +104,7 @@ def benchmark_coreml(model_path, seq_len=128, max_options=4, samples=30):
     print(f"  max:  {np.max(timings):.2f} ms")
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Core ML conversion and benchmark tool for Laya")
     parser.add_argument("--source", default=os.path.join(_ROOT, "source"), help="source directory with original PyTorch checkpoint")
     parser.add_argument("--output", default=os.path.join(_ROOT, "benchmarks", "results", "laya_decision.mlpackage"), help="path to save .mlpackage")

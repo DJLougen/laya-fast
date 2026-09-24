@@ -14,6 +14,7 @@ import sys
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
+from typing import Any, NotRequired, TypedDict
 
 import numpy as np
 import torch
@@ -23,7 +24,47 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from ane.ane_model import ConvBody
 
 
-def compute_plan(model, compute_units):
+class ComputePlan(TypedDict):
+    """Static compute-plan summary written into report.json."""
+
+    kind: str
+    preferred_operation_counts: dict[str, int]
+    supported_operation_counts: dict[str, int]
+    estimated_cost_by_device: dict[str, float]
+    non_ane_ops: dict[str, dict[str, int]]
+
+
+class TimingStats(TypedDict):
+    """Predict-call timing summary."""
+
+    samples: int
+    mean_ms: float
+    p50_ms: float
+    p95_ms: float
+    min_ms: float
+    max_ms: float
+
+
+class OutputInfo(TypedDict):
+    """Per-output sanity record (shape + finiteness)."""
+
+    shape: list[int]
+    finite: bool
+
+
+class ExportReport(TypedDict):
+    """report.json payload for one exported bucket."""
+
+    length: int
+    model: str
+    compute_units: str
+    conversion_seconds: NotRequired[float]
+    load_compile_seconds: NotRequired[float]
+    compute_plan: NotRequired[ComputePlan]
+    timing: NotRequired[TimingStats]
+    outputs: NotRequired[dict[str, OutputInfo]]
+
+def compute_plan(model: Any, compute_units: str) -> ComputePlan:
     import coremltools as ct
 
     units = {
@@ -35,11 +76,12 @@ def compute_plan(model, compute_units):
     plan = ct.models.compute_plan.MLComputePlan.load_from_path(
         model.get_compiled_model_path(), compute_units=units
     )
-    preferred, supported = Counter(), Counter()
-    costs = defaultdict(float)
-    by_op = defaultdict(Counter)
+    preferred: Counter[str] = Counter()
+    supported: Counter[str] = Counter()
+    costs: defaultdict[str, float] = defaultdict(float)
+    by_op: defaultdict[str, Counter[str]] = defaultdict(Counter)
 
-    def visit(block):
+    def visit(block: Any) -> None:
         for op in block.operations:
             usage = plan.get_compute_device_usage_for_mlprogram_operation(op)
             cost = plan.get_estimated_cost_for_mlprogram_operation(op)
@@ -65,7 +107,7 @@ def compute_plan(model, compute_units):
     }
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--model", default="converted-fp16", help="converted model dir")
     ap.add_argument("--length", type=int, required=True)
@@ -99,9 +141,9 @@ def main():
     }
     inputs["marker_map"][:, 0] = 1
 
-    report = {"length": L, "model": args.model, "compute_units": args.compute_units}
+    report: ExportReport = {"length": L, "model": args.model, "compute_units": args.compute_units}
     with torch.inference_mode():
-        traced = torch.jit.trace(body, tuple(inputs.values()), strict=True, check_trace=True)
+        traced = torch.jit.trace(body, tuple(inputs.values()), strict=True, check_trace=True)  # type: ignore[no-untyped-call]  # reason: torch.jit.trace is untyped in torch stubs
     t0 = time.perf_counter()
     converted = ct.convert(
         traced,

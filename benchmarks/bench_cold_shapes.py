@@ -19,15 +19,27 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Any, NotRequired, TypedDict
 
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from laya_api import QuestionDef, Questions  # noqa: E402  # reason: sys.path set above
+
 N_SINGLE = 30
 N_BATCH = 10
 REPEATS = 3  # calls per request; call 1 = cold, calls 2..N = steady (2nd may compile)
+
+
+class StatBlock(TypedDict):
+    """Percentile/mean summary over a latency sample."""
+
+    p50: float
+    p90: float
+    mean: float
+    n: int
 
 _WORDS = (
     "the customer was charged twice for the same order and wants a refund "
@@ -37,21 +49,21 @@ _WORDS = (
 ).split()
 
 
-def _state(n):
+def _state(n: int) -> str:
     """A state string of ~n words (deterministic, no RNG)."""
     reps = (n // len(_WORDS)) + 2
     return " ".join((_WORDS * reps)[:n])
 
 
 
-def _choice_q(i, k=3):
+def _choice_q(i: int, k: int = 3) -> QuestionDef:
     crit = {f"opt{j}": f"option {j} for case {i}" for j in range(k)}
     return {"type": "choice", "instructions": f"Which option fits case {i}?",
             "criteria": crit}
 
 
-def _batch_questions(nq, seed):
-    qs = {}
+def _batch_questions(nq: int, seed: int) -> Questions:
+    qs: Questions = {}
     for i in range(nq):
         if i % 3 == 0:
             qs[f"q{i}"] = _choice_q(seed + i, k=3 + (i % 4))
@@ -65,13 +77,13 @@ def _batch_questions(nq, seed):
     return qs
 
 
-def _stats(vals):
+def _stats(vals: list[float]) -> StatBlock:
     a = np.asarray(vals, dtype=np.float64)
     return {"p50": float(np.percentile(a, 50)), "p90": float(np.percentile(a, 90)),
             "mean": float(a.mean()), "n": len(vals)}
 
 
-def main():
+def main() -> int:
     import mlx.core as mx
     mx.set_cache_limit(1 << 30)  # 1 GB freed-buffer cache cap (memory budget)
     import laya_api
@@ -89,16 +101,18 @@ def main():
     # pipeline builds) are not attributed to the cold-shape measurements.
     agent.system_one(_state(30), {"w": _choice_q(0)})
 
-    first, second, steady = [], [], []
-    shapes = []
+    first: list[float] = []
+    second: list[float] = []
+    steady: list[float] = []
+    shapes: list[str] = []
 
     # distinct single-question lengths spread over 20..500 words
-    ns = np.linspace(20, 500, N_SINGLE).astype(int)
+    ns: Any = np.linspace(20, 500, N_SINGLE).astype(int)
     ns = sorted(set(int(n) for n in ns))
     for i, n in enumerate(ns):
         s, q = _state(n), {"q": _choice_q(i)}
         L = agent.prepare(s, q)[2]["input_ids"].shape[1]
-        ts = []
+        ts: list[float] = []
         for _ in range(REPEATS):
             t0 = time.perf_counter()
             agent.system_one(s, q)

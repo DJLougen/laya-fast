@@ -27,19 +27,22 @@ import math
 import os
 import sys
 import threading
+from collections.abc import Callable, Iterable
 from pathlib import Path
+from typing import Any, Protocol, cast
 
 import numpy as np
+import numpy.typing as npt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import laya_api
 from laya_api import QTYPES, temp_bucket, confidence_from_probs
-from ane.ane_runtime import LayaANE
+from ane.ane_runtime import ForwardItem, LayaANE
 
 # Measured per-question ANE forward_one cost (ms) by bucket, M3 Max fp16.
 # 256/512 are needed for the cross-engine split of long batches (see docstring).
-ANE_MS = {64: 8.93, 80: 9.58, 96: 9.62, 128: 9.71, 256: 20.37, 512: 51.69}
+ANE_MS: dict[int, float] = {64: 8.93, 80: 9.58, 96: 9.62, 128: 9.71, 256: 20.37, 512: 51.69}
 # Buckets whose ANE body is worth using for a *single* question. At 256/512 the
 # two engines tie, and a single question cannot be overlapped, so the GPU runs it.
 SINGLE_MAX_BUCKET = 128
@@ -50,11 +53,19 @@ MLX_PER_TOKEN = 0.088
 MASK_NEG = -1e4
 
 
-def _mlx_batch_ms(n, l_pad):
+class _ANEEngine(Protocol):
+    """Surface of ane.ane_runtime.LayaANE used by the router."""
+
+    buckets: list[int]
+
+    def forward_one(self, item: ForwardItem) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.float32]]: ...
+
+
+def _mlx_batch_ms(n: int, l_pad: int) -> float:
     return MLX_INTERCEPT + MLX_PER_TOKEN * n * l_pad
 
 
-def _ane_ms(length, buckets):
+def _ane_ms(length: int, buckets: list[int]) -> float | None:
     for L in buckets:
         if length <= L:
             return ANE_MS.get(L, 9.7)
@@ -62,30 +73,34 @@ def _ane_ms(length, buckets):
 
 
 class LayaFast:
-    def __init__(self, model_dir, ane_buckets=(64, 80, 96, 128, 256, 512), ane_dir=None,
-                 compile=True, dtype="float16"):
+    def __init__(self, model_dir: str, ane_buckets: Iterable[int] = (64, 80, 96, 128, 256, 512),
+                 ane_dir: str | Path | None = None,
+                 compile: bool = True, dtype: str = "float16") -> None:
         # MLX buffer-cache cap is owned by LayaMLX (LAYA_CACHE_LIMIT_MB, 128 MB).
-        self.mlx = laya_api.LayaMLX(model_dir, dtype=dtype, compile=compile)
+        self.mlx: laya_api.LayaMLX = cast(Callable[..., Any], laya_api.LayaMLX)(
+            model_dir, dtype=dtype, compile=compile)
+        import mlx.core as mx
         # Missing compiled bodies are not an error. Those lengths stay on the GPU.
         ane_root = Path(ane_dir) if ane_dir else Path(__file__).resolve().parent / "ane"
-        present = []
+        present: list[int] = []
         for L in ane_buckets:
             folder = ane_root / ("body%d" % L)
             if (folder / "model.mlmodelc").exists() or (folder / "model.mlpackage").exists():
                 present.append(L)
-        self.ane = LayaANE(model_dir, buckets=present, ane_dir=ane_root) if present else None
-        self.tok = self.mlx.tok
-        self.cfg = self.mlx.cfg
-        self.temperature = self.mlx.temperature
-        self.temperature_by_options = self.mlx.temperature_by_options
-        self.last_raw = None
+        self.ane: _ANEEngine | None = cast(Callable[..., _ANEEngine], LayaANE)(
+            model_dir, buckets=present, ane_dir=ane_root) if present else None
+        self.tok: laya_api._Tokenizer = self.mlx.tok
+        self.cfg: dict[str, Any] = self.mlx.cfg
+        self.temperature: list[float] = self.mlx.temperature
+        self.temperature_by_options: dict[str, float] = self.mlx.temperature_by_options
+        self.last_raw: tuple[mx.array, mx.array] | None = None
 
     # ------------------------------------------------------------------ prep
-    def prepare(self, state, questions):
+    def prepare(self, state: Any, questions: laya_api.Questions) -> tuple[list[str], list[laya_api.Item], laya_api.Batch]:
         return self.mlx.prepare(state, questions)
 
     # ------------------------------------------------------------------ format
-    def _format(self, q, k, logits, act_row):
+    def _format(self, q: laya_api.InternalQ, k: int, logits: npt.NDArray[np.float32], act_row: npt.NDArray[np.float32]) -> laya_api.Answer:
         """One question's formatted answer from raw logits[k] + act logits."""
         qt = QTYPES[q["t"]]
         z = np.asarray(logits[:k], np.float32) / self.temperature_by_options.get(
@@ -94,7 +109,7 @@ class LayaFast:
         p = p / p.sum()
         e = np.exp(act_row - act_row.max())
         act_p = float((e / e.sum())[0])
-        ext = {"act_probability": act_p}
+        ext: laya_api.RLAgentExt = {"act_probability": act_p}
         if q["t"] == "choice":
             keys = list(q["crit"].keys())
             return {"type": "choice", "choice": keys[int(p.argmax())],
@@ -108,7 +123,10 @@ class LayaFast:
         return {"type": "noul", "noul": round(float(p[1]), 4), "rl_agent": ext}
 
     # ------------------------------------------------------------------ paths
-    def _ane_rows(self, rows, items, kmax, raw_logits, raw_act, answers, ids):
+    def _ane_rows(self, rows: list[int], items: list[laya_api.Item], kmax: int,
+                  raw_logits: npt.NDArray[np.float32], raw_act: npt.NDArray[np.float32],
+                  answers: dict[str, laya_api.Answer], ids: list[str]) -> None:
+        assert self.ane is not None
         for r in rows:
             it = items[r]
             logits, act = self.ane.forward_one(it)
@@ -116,7 +134,9 @@ class LayaFast:
             raw_act[r] = act
             answers[ids[r]] = self._format(it["q"], len(it["markers"]), logits, act)
 
-    def _mlx_rows(self, rows, items, pad_id, raw_logits, raw_act, answers, ids):
+    def _mlx_rows(self, rows: list[int], items: list[laya_api.Item], pad_id: int,
+                  raw_logits: npt.NDArray[np.float32], raw_act: npt.NDArray[np.float32],
+                  answers: dict[str, laya_api.Answer], ids: list[str]) -> None:
         sub = [items[r] for r in rows]
         b = laya_api.collate_items(sub, pad_id)
         logits, act = self.mlx.raw_forward(b)
@@ -127,18 +147,18 @@ class LayaFast:
             raw_act[r] = act[j]
             answers[ids[r]] = self._format(it["q"], k, logits[j], act[j])
 
-    def system_one(self, state, questions):
+    def system_one(self, state: Any, questions: laya_api.Questions) -> laya_api.SystemOneResult:
         import mlx.core as mx
 
         ids, items, b = self.prepare(state, questions)
         n = len(items)
         kmax = b["marker_pos"].shape[1]
-        raw_logits = np.full((n, kmax), MASK_NEG, np.float32)
-        raw_act = np.zeros((n, 2), np.float32)
-        answers = {}
+        raw_logits: npt.NDArray[np.float32] = np.full((n, kmax), MASK_NEG, np.float32)
+        raw_act: npt.NDArray[np.float32] = np.zeros((n, 2), np.float32)
+        answers: dict[str, laya_api.Answer] = {}
         pad_id = self.tok.pad_token_id
 
-        eligible = []
+        eligible: list[int] = []
         if self.ane is not None:
             eligible = [r for r in range(n)
                         if _ane_ms(len(items[r]["ids"]), self.ane.buckets) is not None]
@@ -156,11 +176,11 @@ class LayaFast:
             # Choose split k minimizing makespan: ANE gets the longest eligible
             # questions first (removing them shrinks MLX's padded L the most).
             by_len = sorted(eligible, key=lambda r: -len(items[r]["ids"]))
-            best = None
+            best: tuple[float, list[int], list[int]] | None = None
             for k in range(0, len(by_len) + 1):
                 ane_rows = by_len[:k]
                 mlx_rows = [r for r in range(n) if r not in set(ane_rows)]
-                t_ane = sum(_ane_ms(len(items[r]["ids"]), self.ane.buckets)
+                t_ane = sum(cast(float, _ane_ms(len(items[r]["ids"]), cast(_ANEEngine, self.ane).buckets))
                             for r in ane_rows)
                 if mlx_rows:
                     l_pad = max(len(items[r]["ids"]) for r in mlx_rows)
@@ -170,15 +190,15 @@ class LayaFast:
                 makespan = max(t_ane, t_mlx)
                 if best is None or makespan < best[0]:
                     best = (makespan, ane_rows, mlx_rows)
-            _, ane_rows, mlx_rows = best
+            _, ane_rows, mlx_rows = cast(tuple[float, list[int], list[int]], best)
             if not ane_rows:
                 self._mlx_rows(mlx_rows, items, pad_id, raw_logits, raw_act, answers, ids)
             elif not mlx_rows:
                 self._ane_rows(ane_rows, items, kmax, raw_logits, raw_act, answers, ids)
             else:
-                err = []
+                err: list[Exception] = []
 
-                def run_ane():
+                def run_ane() -> None:
                     try:
                         self._ane_rows(ane_rows, items, kmax, raw_logits, raw_act,
                                        answers, ids)

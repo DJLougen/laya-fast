@@ -23,11 +23,14 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
 # Repo root holds the runtime modules (laya_fast, laya_api) and the default model.
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
+if TYPE_CHECKING:
+    import laya_api
 
 PORT = int(os.environ.get("LAYA_PORT", "8765"))
 MODEL_DIR = os.environ.get("LAYA_MODEL", str(ROOT / "converted-fp16"))
@@ -39,15 +42,15 @@ INSTRUCTIONS = "Which computer action does this spoken command ask for?"
 NONE = {"kind": "none"}
 
 _lock = threading.Lock()
-_agent = None
+_agent: Any = None
 _last_used = 0.0
 
 
-def log(msg):
+def log(msg: str) -> None:
     print("%s %s" % (time.strftime("%Y-%m-%d %H:%M:%S"), msg), flush=True)
 
 
-def get_agent():
+def get_agent() -> Any:
     global _agent, _last_used
     _last_used = time.time()
     if _agent is None:
@@ -58,7 +61,7 @@ def get_agent():
     return _agent
 
 
-def _idle_unloader():
+def _idle_unloader() -> None:
     global _agent
     while True:
         time.sleep(30)
@@ -74,27 +77,27 @@ def _idle_unloader():
                 log("model unloaded after %.0f s idle" % IDLE_UNLOAD_S)
 
 
-def load_commands():
+def load_commands() -> tuple[dict[str, Any], dict[str, Any]]:
     """Re-read every request so edits to voice_commands.json apply without a restart."""
-    cfg = json.loads(COMMANDS.read_text())
+    cfg: dict[str, Any] = json.loads(COMMANDS.read_text())
     actions = {k: v for k, v in cfg["actions"].items() if k != "none"}
     return cfg, actions
 
 
-def notify(text, title="Laya"):
+def notify(text: str, title: str = "Laya") -> None:
     subprocess.Popen(["/usr/bin/osascript", "-e",
                       "on run argv\n display notification (item 1 of argv) with title (item 2 of argv)\nend run",
                       text, title])
 
 
-def clean(text):
+def clean(text: str) -> str:
     return re.sub(r"[\s.!?,;:]+$", "", text.strip())
 
-_POLITE = [r"^(hey|ok|okay|alright)[,\s]+", r"^(can|could|would|will) you (please )?", r"^please ",
+_POLITE: list[str] = [r"^(hey|ok|okay|alright)[,\s]+", r"^(can|could|would|will) you (please )?", r"^please ",
            r",? please$", r",? (for me|now|thanks|thank you)$"]
 
 
-def argument(action, text):
+def argument(action: dict[str, Any], text: str) -> str:
     """Action argument = transcript minus polite wrappers and the action's own
     trigger phrases. 'strip' may be one regex or a list (prefixes and suffixes)."""
     arg = clean(text)
@@ -105,7 +108,7 @@ def argument(action, text):
     return arg or clean(text)
 
 
-def run_action(name, action, arg):
+def run_action(name: str, action: dict[str, Any], arg: str) -> str:
     """Run one catalog action. User text is only ever passed as an argv element."""
     kind = action["kind"]
     if kind == "none":
@@ -131,9 +134,9 @@ def run_action(name, action, arg):
     return "Unknown action kind %r" % kind
 
 
-def decide(text):
+def decide(text: str) -> tuple[Any, Any, Any, float, dict[str, Any]]:
     cfg, actions = load_commands()
-    q = {"action": {"type": "choice", "instructions": INSTRUCTIONS,
+    q: "laya_api.Questions" = {"action": {"type": "choice", "instructions": INSTRUCTIONS,
                     "criteria": {k: v["description"] for k, v in actions.items()}}}
     t0 = time.perf_counter()
     ans = get_agent().system_one(clean(text), q)["answers"]["action"]
@@ -145,7 +148,7 @@ def decide(text):
 
 
 class Handler(BaseHTTPRequestHandler):
-    def _send(self, code, obj):
+    def _send(self, code: int, obj: Any) -> None:
         body = json.dumps(obj, ensure_ascii=False).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
@@ -153,22 +156,22 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _body(self):
+    def _body(self) -> dict[str, Any]:
         raw = self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode()
         if "json" in (self.headers.get("Content-Type") or ""):
-            return json.loads(raw or "{}")
+            return cast(dict[str, Any], json.loads(raw or "{}"))
         return {k: v[0] for k, v in urllib.parse.parse_qs(raw).items()}
 
-    def log_message(self, fmt, *args):  # silence default access log
+    def log_message(self, fmt: str, *args: Any) -> None:  # silence default access log
         pass
 
-    def do_GET(self):
+    def do_GET(self) -> None:
         if self.path == "/health":
             return self._send(200, {"ok": True, "loaded": _agent is not None,
                                     "idle_unload_s": IDLE_UNLOAD_S})
         self._send(404, {"error": "not found"})
 
-    def do_POST(self):
+    def do_POST(self) -> None:
         try:
             body = self._body()
             with _lock:
@@ -195,7 +198,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(500, {"error": str(e)})
 
 
-def main():
+def main() -> None:
     threading.Thread(target=_idle_unloader, daemon=True).start()
     if os.environ.get("LAYA_PRELOAD", "1") == "1":
         with _lock:

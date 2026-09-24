@@ -1,0 +1,20 @@
+name: typecheck
+
+on: [push, pull_request]
+
+jobs:
+  mypy:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-dev.txt
+          pip install -r requirements-export.txt
+      - name: mypy --strict (all tracked files)
+        run: |
+          git ls-files -z '*.py' | xargs -0 mypy

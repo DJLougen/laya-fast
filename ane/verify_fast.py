@@ -10,18 +10,44 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any, NotRequired, TypedDict, cast
 
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "benchmarks"))
 
-import benchmark
+import benchmark  # type: ignore[import-not-found]  # reason: sibling module resolved via sys.path.insert(benchmarks dir) above
 import laya_api
 from laya_fast import LayaFast
 
 
-def main():
+VerifyGate = TypedDict("VerifyGate", {
+    "pass": bool,
+    "failures": list[str],
+    "max_logit_diff": float,
+    "max_prob_diff": float,
+})
+
+
+class TimingRow(TypedDict):
+    """Per-fixture interleaved timing row."""
+
+    fast_ms: list[float]
+    mlx_ms: list[float]
+    fast_p50: float
+    mlx_p50: float
+
+
+class VerifyReport(TypedDict):
+    """verify_fast.json payload."""
+    load_seconds: dict[str, float]
+    gate: VerifyGate
+    timing: dict[str, TimingRow]
+    rss_mb: NotRequired[int]
+
+
+def main() -> int:
     import mlx.core as mx
     mx.set_cache_limit(1 << 30)
 
@@ -36,12 +62,12 @@ def main():
     # ---- golden gate on LayaFast outputs
     golden = json.load(open(Path(__file__).resolve().parent.parent / "benchmarks" / "fixtures" / "autoresearch_golden.json"))["fixtures"]
     fixtures = benchmark.make_fixtures()
-    import bench_autoresearch
+    import bench_autoresearch  # type: ignore[import-not-found]  # reason: sibling module resolved via sys.path.insert(benchmarks dir) above
     current = bench_autoresearch.run_all(fast, fixtures)
     fails, max_logit, max_prob = bench_autoresearch.compare(golden, current)
     print("gate: %s  max|dlogit|=%.3e max|dprob|=%.3e" %
           ("PASS" if not fails else "FAIL", max_logit, max_prob), file=sys.stderr)
-    for f in fails[:10]:
+    for f in cast(list[Any], fails)[:10]:
         print("  - %s" % f, file=sys.stderr)
 
     # ---- extra workloads: mixed-length batch + unseen-length singles
@@ -69,7 +95,7 @@ def main():
     # ---- interleaved timing, 3 rounds
     all_fx = dict(fixtures)
     all_fx.update(extra)
-    results = {name: {"fast": [], "mlx": []} for name in all_fx}
+    results: dict[str, dict[str, list[float]]] = {name: {"fast": [], "mlx": []} for name in all_fx}
     for rnd in range(3):
         for name, (state, questions) in all_fx.items():
             for tag, agent in (("fast", fast), ("mlx", mlx_agent)):
@@ -79,7 +105,7 @@ def main():
                     mx.eval(*agent.last_raw)
                 results[name][tag].append((time.perf_counter() - t0) * 1000.0)
 
-    report = {"load_seconds": {"fast": round(fast_load, 2), "mlx": round(mlx_load, 2)},
+    report: VerifyReport = {"load_seconds": {"fast": round(fast_load, 2), "mlx": round(mlx_load, 2)},
               "gate": {"pass": not fails, "failures": fails,
                        "max_logit_diff": max_logit, "max_prob_diff": max_prob},
               "timing": {}}
